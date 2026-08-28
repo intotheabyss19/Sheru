@@ -1,0 +1,66 @@
+"""Interaction journal — the raw material for Sheru's self-improvement loop (KB-style).
+
+Every handled command is appended as one JSON line. A feedback signal is attached to the *previous*
+entry when the next utterance looks like a correction/repeat/cancel (implicit negative), or when the
+user explicitly confirms/denies. Nightly, `claude -p` curates these into labeled training pairs.
+"""
+from __future__ import annotations
+
+import json
+import re
+import threading
+import time
+from pathlib import Path
+
+from . import config
+
+JOURNAL = Path(config.DATA_DIR) / "journal.jsonl"
+
+# implicit negative feedback on the previous turn
+_CORRECTION = re.compile(
+    r"\b(no|nope|not that|wrong|that'?s wrong|i (?:said|meant)|actually|instead|undo|that'?s not)\b", re.I)
+_CANCEL = re.compile(r"\b(stop|cancel|never ?mind)\b", re.I)
+
+
+class Journal:
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._last: dict | None = None
+        JOURNAL.parent.mkdir(parents=True, exist_ok=True)
+
+    def record(self, *, utterance: str, tier: int, tool: str | None, args: dict | None,
+               speech: str, handoff: str | None, ts: float, latency: float | None = None,
+               stt_latency: float | None = None) -> dict:
+        # implicit feedback: does THIS utterance correct the PREVIOUS turn?
+        if self._last is not None:
+            if _CORRECTION.search(utterance):
+                self._flush(self._last, feedback="negative", note="correction-followup")
+            elif _CANCEL.search(utterance) and self._last.get("handoff"):
+                self._flush(self._last, feedback="negative", note="cancelled")
+            else:
+                self._flush(self._last, feedback="unlabeled")
+        entry = {"ts": round(ts, 3), "utterance": utterance, "tier": tier, "tool": tool,
+                 "args": args, "speech": speech, "handoff": handoff, "feedback": None}
+        if latency is not None: entry["latency"] = round(latency, 2)
+        if stt_latency is not None: entry["stt"] = round(stt_latency, 2)
+        self._last = entry
+        return entry
+
+    def label_last(self, feedback: str, note: str = "") -> None:
+        """Explicit feedback hook (e.g. a voiced 'yes that's right' / 'no')."""
+        if self._last is not None:
+            self._flush(self._last, feedback=feedback, note=note)
+            self._last = None
+
+    def flush(self) -> None:
+        if self._last is not None:
+            self._flush(self._last, feedback=self._last.get("feedback") or "unlabeled")
+            self._last = None
+
+    def _flush(self, entry: dict, feedback: str, note: str = "") -> None:
+        entry = {**entry, "feedback": feedback}
+        if note:
+            entry["note"] = note
+        with self._lock:
+            with open(JOURNAL, "a") as f:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")

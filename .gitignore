@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.venv
+
+# Large downloaded models (not personal, just big)
+models/
+
+# PERSONAL DATA — never publish (journal of your commands, remembered facts, datasets, trained adapters)
+data/
+adapters/
+*.jsonl
+!tests/**/*.jsonl
+
+# Local logs / OS cruft
+*.log
+.DS_Store
+
+# real mic captures (privacy)
+*loopback*.wav
+capture_*.wav

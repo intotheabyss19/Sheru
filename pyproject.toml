@@ -1,0 +1,34 @@
+[project]
+name = "sheru"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Yash Gupta", email = "yash110704@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "google-api-python-client>=2.199.0",
+    "google-auth>=2.57.0",
+    "google-auth-oauthlib>=1.4.1",
+    "mlx-lm>=0.31.3",
+    "mlx-whisper>=0.4.3",
+    "numpy>=2.5.2",
+    "parakeet-mlx>=0.5.2",
+    "pyobjc-framework-applicationservices>=12.2.2",
+    "pyobjc-framework-avfoundation>=12.2.2",
+    "pyobjc-framework-cocoa>=12.2.2",
+    "pyobjc-framework-quartz>=12.2.2",
+    "pyobjc-framework-vision>=12.2.2",
+    "rapidfuzz>=3.14.5",
+    "rumps>=0.4.0",
+    "sherpa-onnx==1.13.5",
+    "sounddevice>=0.5.6",
+]
+
+[project.scripts]
+sheru = "sheru:main"
+
+[build-system]
+requires = ["uv_build>=0.12.1,<0.13.0"]
+build-backend = "uv_build"

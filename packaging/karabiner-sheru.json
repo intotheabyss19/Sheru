@@ -1,0 +1,15 @@
+{
+  "description": "Dictation/mic key (F5) -> activate Sheru (after disabling macOS Dictation)",
+  "manipulators": [
+    {
+      "type": "basic",
+      "from": { "key_code": "f5", "modifiers": { "optional": ["any"] } },
+      "to": [ { "shell_command": "/Users/yash/Projects/Sheru/.venv/bin/sheru trigger" } ]
+    },
+    {
+      "type": "basic",
+      "from": { "apple_vendor_top_case_key_code": "keyboard_fn", "modifiers": { "mandatory": ["fn"] } },
+      "to": [ { "key_code": "f5" } ]
+    }
+  ]
+}
