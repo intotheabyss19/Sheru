@@ -47,6 +47,9 @@ weather, news, search, screen and "ask Claude" — the bulk of the "I can't brow
 - Mic stays open longer after a spoken answer, and the push-to-talk loop waits out an in-flight Claude turn so
   voice follow-ups actually continue the thread.
 - A one-off song lookup no longer hijacks the conversation's Claude session.
+- **Fixed a real bug found while testing:** `ClaudeSession.busy` had a startup race (it read `_proc`, which the
+  pump thread sets asynchronously), so the push-to-talk loop stopped waiting for Claude the instant a handoff
+  started — voice follow-ups to Claude would silently break. Now synchronous.
 - **New test:** `tests/conversation_test.py` — 12 checks, all pass (history, resume, context injection).
 
 ## 4. ★ Hindi — the biggest remaining lever (ready, one flip to enable)
@@ -122,6 +125,8 @@ a bigger model buys nothing here; the fixes above are what mattered.
 - `tests/conversation_test.py` → 12/12 ✓
 - `tests/stress_test.py --no-llm` → English grammar routes green; new routes (trainer/fs/terminal/weather/silent-search) confirmed ✓
 - Live 4B: India→1947, SBI→escalate, folder→created, weather→real ✓
+- **Real 3-turn conversation with live Claude** (escalation repaired): weather (local) → India news → "what
+  about cricket" **resumed the thread** and returned cricket news, session id stable ✓
 - STT: parakeet vs whisper on Hindi audio ✓ (table §4)
 - 4B vs 8B routing probe ✓ (§5)
 
