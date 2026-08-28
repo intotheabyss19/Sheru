@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Callable
 
-from .actions import apps, location, music, system, web
+from .actions import apps, files, location, music, system, weather, web
 
 
 def _default_msg_app() -> str:
@@ -61,7 +61,11 @@ class Router:
         (re.compile(r"^(?:get|have|ask|tell|make)\s+(?:your\s+|the\s+)?(?:trainer|claude(?:\s+code)?)\s+(?:to\s+)?(?:fix|improve|debug|change|update|patch|look at|work on|sort out|handle|figure out|look into|retrain)\s+(.+)$"), "trainer"),
         (re.compile(r"^(?:fix|improve|debug|retrain|patch|update)\s+(?:your\s?self|sheru)(?:['’]s)?(?:\s+(.+))?$"), "trainer"),
         (re.compile(r"^(?:fix|improve|debug|change|update|patch)\s+your\s+(.+)$"), "trainer"),
-        (re.compile(r"^(?:open|launch|start|call|get|bring)\s+(?:up\s+)?(?:a\s+|the\s+|your\s+)?(?:dev(?:eloper)?|trainer|training|claude|this)\s+session\b.*$"), "trainer"),
+        (re.compile(r"^(?:open|launch|start|bring|fire)\s+(?:up\s+)?(?:your\s+|the\s+|a\s+)?trainer\b.*$"), "trainer"),
+        (re.compile(r"^(?:open|launch|start|call|get|bring)\s+(?:up\s+)?(?:a\s+|the\s+|your\s+|new\s+)?(?:new\s+)?(?:dev(?:eloper)?|trainer|training|claude|cloud|this)\s+session\b.*$"), "trainer"),
+        # local filesystem (no Claude needed): open a terminal in a dir, make folders/files
+        (re.compile(r"^open\s+(?:a\s+|the\s+)?(?:terminal|ghostty|shell|command line|iterm)\s+(?:in|at|inside|here)\b\s*(.*)$"), "terminal_in"),
+        (re.compile(r"^(?:make|create|new|touch|add)\s+(?:me\s+)?(?:a\s+|an\s+)?(?:new\s+)?((?:folder|directory|dir|file|text\s*file|txt\s*file|document|\.txt)\b.*)$"), "fs_make"),
         (re.compile(r"^(?:open|launch|start|run)\s+(?:the\s+)?(.+?)(?:\s+(?:app|application|browser))?$"), "open"),
         (re.compile(r"^(?:quit|close|kill)\s+(?!all (?:my|the|your) )(?:the\s+)?(.+?)(?:\s+(?:app|application))?$"), "quit"),
         (re.compile(r"^(?:switch|go|jump)\s+to\s+(?:the\s+)?(.+?)\s+profile$"), "profile"),
@@ -134,6 +138,10 @@ class Router:
             return Result("Recording is back on.")
         if kind == "open":
             return Result(apps.open_app(g[0]))
+        if kind == "terminal_in":
+            return Result(files.open_terminal((g[0] or "").strip() or None))
+        if kind == "fs_make":
+            return Result(files.make(g[0]), followup=True)
         if kind == "quit":
             return Result(apps.quit_app(g[0]))
         if kind == "switch":
@@ -145,8 +153,13 @@ class Router:
         if kind == "images":
             return Result(web.image_search(g[0]))
         if kind == "search":
+            q = g[0].strip()
             eng = g[1].replace(" ", "") if len(g) > 1 and g[1] else None
-            return Result(web.search(g[0], eng), followup=True)
+            if re.fullmatch(r"(?:the\s+web\s+for\s+)?(?:that|this|it|them|those|the results?)", q):
+                if web.last_query():          # "search the web for that" -> summarize last topic silently, not a literal tab
+                    return Result("On it.", handoff=f"Search the web for '{web.last_query()}' and give a brief spoken summary of the top results.", tier=2, followup=True)
+                return Result("Search for what exactly?")
+            return Result(web.search(q, eng), followup=True)
         if kind == "url":
             return Result(web.open_url(g[0]))
         if kind == "volume":
@@ -194,7 +207,11 @@ class Router:
             return Result("Let me check.", handoff=location.localize(m.group(0)), tier=2, followup=True)
         if kind == "weather":
             city = location.describe() or "your area"
-            return Result("Let me check.", handoff=f"What is the current weather in {city} right now? "
+            self.say_async("Checking the weather.")
+            w = weather.fetch(city)                       # silent, direct — no browser, no Claude dependency
+            if w:
+                return Result(w, followup=True)
+            return Result("", handoff=f"What is the current weather in {city} right now? "
                           f"Reply with a brief, natural 1-2 sentence spoken summary.", tier=2, followup=True)
         if kind == "search_summarize":
             topic = location.localize(g[0].strip())
@@ -251,10 +268,8 @@ class Router:
         # light tier unsure -> let the judgement model decide before escalating to Claude
         if self.fast is not None and self.llm is not None and (d.get("tool") == "ask_claude" or "say" in d):
             d = self.llm.decide(t, hist, extra_system=mem_ctx)
-        self.history += [{"role": "user", "content": t}]
         if "say" in d:
-            self.history += [{"role": "assistant", "content": d["say"]}]
-            return Result(d["say"], followup=True, tier=1)
+            return Result(d["say"], followup=True, tier=1)     # history is recorded centrally by the app (all tiers)
         tool, a = d["tool"], d["args"]
         try:
             if tool == "open_app":     r = apps.open_app(a["name"])
@@ -276,5 +291,4 @@ class Router:
             else:                      return Result("I'll ask Claude.", handoff=t, tier=2)
         except (KeyError, ValueError, TypeError):
             return Result("I'll ask Claude.", handoff=t, tier=2)
-        self.history += [{"role": "assistant", "content": r}]
         return Result(r, tier=1)

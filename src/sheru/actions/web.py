@@ -21,7 +21,7 @@ def set_search_engine(name: str) -> str:
 
 
 def _open(url: str) -> None:
-    subprocess.run(["open", "-a", config.BROWSER_APP, url], check=False)
+    subprocess.run(["open", "-g", "-a", config.BROWSER_APP, url], check=False)   # -g: open in background, don't steal focus from the user's current app
     _state["last_url"] = url
 
 

@@ -97,6 +97,8 @@ def install_mocks():
     R.system.mute = mk("mute"); R.system.media = mk("media"); R.system.now = lambda: "[[time:]]"
     R.system.clipboard = lambda: "clip"; R.system.set_timer = lambda s, cb, label="t": f"[[timer:{s}]]"
     R.music.play_song = mk("play_song")
+    R.weather.fetch = lambda c: None       # force the Claude-fallback path in tests (no live network call)
+    R.files.make = lambda r: f"[[fs:{r}]]"; R.files.open_terminal = lambda w=None: "[[terminal:]]"
     R.location.localize = lambda t: t; R.location.describe = lambda: "Ravangla, Sikkim"
     import sheru.config as _C; _C.update_profile = lambda *a, **k: None      # set_location: no real write
     import sheru.reminders as _REM; _REM.schedule = lambda *a, **k: None     # remind: no real timer/persist
