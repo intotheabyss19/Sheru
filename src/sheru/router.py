@@ -73,7 +73,7 @@ class Router:
         (re.compile(r"^(?:switch|go|jump)\s+(?:over\s+)?(?:me\s+)?to\s+(?:the\s+)?(.+?)(?:\s+(?:app|application))?$"), "switch"),
         (re.compile(r"^(?:show|find|get|search for|google|look up)\s+(?:me\s+)?(?:some\s+|for\s+)?(?:\w+\s+)?(?:pictures|images|photos)\s+of\s+(.+)$"), "images"),
         (re.compile(r"^(?:set my location to|my location is|i live in|i'?m based in|i just moved to|i'?m now (?:in|at)|i moved to)\s+(.+)$"), "set_location"),
-        (re.compile(r".*\bweather\b.*"), "weather"),
+        (re.compile(r"^(?!play\b)(?!.*\bby\b).*\bweather\b.*"), "weather"),
         (re.compile(r"^(?!play\b)(?!.*\bby\b).*\b(news|headlines?|stocks?|stock price|share price|bitcoin|crypto|ethereum|nasdaq|dow jones|who won|score of|election results?|prime minister|president of|forecast|is it (?:going to )?rain(?:ing)?|will it rain|need an umbrella|temperature (?:outside|right now)|what'?s happening|going on (?:in the world|with the)|current (?:price|events))\b.*"), "current"),
         (re.compile(r"^(?:search|look up|google|find)\s+(?:for\s+)?(.+?)\s+(?:and|then)\s+summari[sz]e.*$"), "search_summarize"),
         (re.compile(r"^summari[sz]e(?:\s+(?:me|it|that|this|them|the results|the search|those))?(?:\s+(.+))?$"), "summarize"),
@@ -206,7 +206,11 @@ class Router:
         if kind == "current":
             return Result("Let me check.", handoff=location.localize(m.group(0)), tier=2, followup=True)
         if kind == "weather":
+            raw = m.group(0)
             city = location.describe() or "your area"
+            mc = re.search(r"\b(?:in|at|for)\s+([a-z][\w\s]+?)(?:\s+(?:right now|today|now|currently|please))?$", raw)
+            if mc and not re.search(r"\b(my|here|location|area|me)\b", mc.group(1)):
+                city = mc.group(1).strip().title()        # "weather in tokyo" -> Tokyo, not the profile location
             self.say_async("Checking the weather.")
             w = weather.fetch(city)                       # silent, direct — no browser, no Claude dependency
             if w:

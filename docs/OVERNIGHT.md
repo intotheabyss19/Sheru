@@ -130,4 +130,10 @@ a bigger model buys nothing here; the fixes above are what mattered.
 - STT: parakeet vs whisper on Hindi audio ✓ (table §4)
 - 4B vs 8B routing probe ✓ (§5)
 
+- Full LLM routing stress: **307/378 (81%)**; no regressions from these changes — the 71 misses are the known
+  out-of-scope / ambiguous / correction clusters (graceful-decline features, see `tests/STRESS_REPORT.md`) plus
+  acceptable Claude-instead-of-browser cases. It surfaced + I fixed **2 real weather-rule bugs**: a song title
+  containing "weather" ("play Weather With You by Crowded House") no longer mis-routes, and "weather in <city>"
+  now uses that city instead of always your profile location.
+
 Models downloaded to HF cache (gitignored, not committed): Qwen3-8B-4bit (4.3GB), whisper-large-v3-turbo (1.5GB).
