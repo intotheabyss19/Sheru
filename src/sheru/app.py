@@ -41,6 +41,7 @@ class Sheru:
         self.status = "starting"
         self.followup_until = 0.0
         self.claude_cooldown_until = 0.0
+        self._last_claude_ts = 0.0   # when Claude last answered; a recent one -> resume the same session (continued conversation keeps context)
         self.pending = None          # a drafted action awaiting confirm/rephrase/cancel
         self._pending_path = config.DATA_DIR / "pending.json"   # persist it so a draft survives a restart
         self._restore_pending()
@@ -80,21 +81,46 @@ class Sheru:
         if getattr(res, "resolve_song", None):
             if res.speech:
                 sink(res.speech)
+            self._record_turn(text, res.speech or f"Playing {res.resolve_song}.")
             self._resolve_and_play(res.resolve_song, sink)
             return res.speech
         if getattr(res, "draft", None):
             return self._start_draft(res.draft, sink)
+        if res.handoff:
+            if res.speech:
+                sink(res.speech)
+            self._delegate(res.handoff, sink, user_text=text)   # records the turn + resumes/injects conversation context
+            return res.speech
         if res.speech:
             sink(res.speech)
-        if res.handoff:
-            self._delegate(res.handoff, sink)
-        elif res.followup and self._is_voice_sink(sink):
+        if res.followup and self._is_voice_sink(sink):
             self.allow_followup()
+        self._record_turn(text, res.speech)
         return res.speech
 
     def _is_voice_sink(self, sink) -> bool:
         """True when the reply is spoken (push-to-talk or wake-word), not typed into the panel."""
         return sink is self.speaker.speak or sink is self._say_both
+
+    def _record_turn(self, user: str, assistant: str | None) -> None:
+        """Append this exchange to the shared conversation history (ALL tiers, not just the local LLM), capped, so
+        follow-ups like 'who sings this?' or 'what about tomorrow?' have the context they need to not feel dumb."""
+        h = self.router.history
+        h.append({"role": "user", "content": user})
+        if assistant:
+            h.append({"role": "assistant", "content": assistant})
+        if len(h) > 12:
+            del h[: len(h) - 12]
+
+    def _with_context(self, task: str) -> str:
+        """Prepend the last few turns so a FRESH Claude thread can resolve references ('it', 'that', 'there')."""
+        prior = self.router.history[-6:]
+        if not prior:
+            return task
+        lines = [f"{'User' if m['role'] == 'user' else 'You (Sheru)'}: {m['content']}" for m in prior]
+        return ("Context — earlier in this spoken conversation:\n" + "\n".join(lines)
+                + f"\n\nThe user now says: {task}\n"
+                "Answer only this latest request; use the above only to resolve what they are referring to.")
 
     # ---- draft -> confirm/rephrase -> send ------------------------------------
     def _resolve_and_play(self, query: str, sink) -> None:
@@ -109,8 +135,10 @@ class Sheru:
                   f"\"{query}\". Identify the exact track and reply with ONLY one line in this format:\n"
                   f"TITLE — ARTIST | spotify:track:TRACKID\n"
                   f"Find the track id from its open.spotify.com/track/<id> URL. If you truly can't find it, reply NOT_FOUND.")
+        saved_sid = self.claude.session_id           # a one-off song lookup must not hijack the conversation thread
         self._start_progress("☁️ Claude")
         def done(final: str):
+            self.claude.session_id = saved_sid
             self._stop_progress()
             m = re.search(r"spotify:track:([A-Za-z0-9]{22})", final or "")
             if m:
@@ -119,8 +147,11 @@ class Sheru:
             else:
                 self.speaker.speak(f"I couldn't find {query} on Spotify.")
             self._after_claude()
-        self.claude.run(prompt, on_sentence=lambda s: None, on_done=done,
-                        on_error=lambda e: (self._stop_progress(), self.speaker.speak("I couldn't look that up.")))
+        def failed(e):
+            self.claude.session_id = saved_sid
+            self._stop_progress()
+            self.speaker.speak("I couldn't look that up.")
+        self.claude.run(prompt, on_sentence=lambda s: None, on_done=done, on_error=failed)
 
     def _restore_pending(self) -> None:
         """Reload a drafted-but-unsent message from disk (survives restarts). Expire stale drafts (>1h)."""
@@ -269,10 +300,14 @@ class Sheru:
                     self.panel._set_out("")
                 if cmd:
                     self.handle_text(cmd, sink=self._say_both)
-                # re-listen only when a follow-up is expected: a draft awaiting confirm, or Sheru asked something
+                # if a Claude handoff is in flight, wait it out so the answer + follow-up window arrive first
+                t_end = time.monotonic() + 155
+                while self.claude.busy and time.monotonic() < t_end:
+                    time.sleep(0.1)
+                self.speaker.wait()                        # let Sheru finish talking before the mic re-opens
+                # re-listen only when a follow-up is expected: a draft awaiting confirm, or Sheru just answered
                 if self.pending is None and time.monotonic() >= self.followup_until:
                     break
-                self.speaker.wait()                        # let Sheru finish talking before the mic re-opens
                 first = False
         finally:
             self._listening = False
@@ -327,17 +362,33 @@ class Sheru:
     def allow_followup(self, seconds: float = 6.0) -> None:
         self.followup_until = time.monotonic() + seconds
 
-    def _delegate(self, task: str, sink=None) -> None:
-        """Prefer Claude Code (subscription); fall back to the local model offline or on failure."""
+    def _delegate(self, task: str, sink=None, user_text: str | None = None) -> None:
+        """Prefer Claude Code (subscription); fall back to the local model offline or on failure.
+        Resume the same Claude session for a follow-up (a Claude turn <2 min ago) so continued conversation
+        keeps its context; otherwise start a fresh thread but inject the recent turns for reference-resolution."""
         from . import net
         sink = sink or self.speaker.speak
+        resume = (self.claude.session_id is not None
+                  and time.monotonic() - self._last_claude_ts < 120)
         if time.monotonic() >= self.claude_cooldown_until and net.online():
             self.status = "claude"
             self._start_progress("☁️ Claude")
-            self.claude.run(task, on_sentence=sink,
-                            on_done=lambda _: (self._stop_progress(), self._after_claude()),
+            payload = task if resume else self._with_context(task)    # reads PRIOR turns
+            if user_text is not None:
+                self._record_turn(user_text, None)                   # then record this turn (assistant filled on done)
+
+            def _done(final: str):
+                self._stop_progress()
+                if final:
+                    self.router.history.append({"role": "assistant", "content": final[:800]})
+                self._last_claude_ts = time.monotonic()
+                self._after_claude()
+
+            self.claude.run(payload, on_sentence=sink, resume=resume, on_done=_done,
                             on_error=lambda e: (self._stop_progress(), self._local_fallback(task, e, sink)))
         else:
+            if user_text is not None:
+                self._record_turn(user_text, None)
             self._start_progress("⚡ Sheru (offline)")
             self._local_fallback(task, None, sink)
             self._stop_progress()
@@ -349,14 +400,17 @@ class Sheru:
             self.claude_cooldown_until = time.monotonic() + 300     # retry Claude after 5 min
         if self.llm is not None:
             ctx = self.memory.context_block(task) if self.memory else ""
-            sink(self.llm.answer(task, self.router.history[-6:], extra_system=ctx))
+            ans = self.llm.answer(task, self.router.history[-6:], extra_system=ctx)
+            sink(ans)
+            self.router.history.append({"role": "assistant", "content": ans})
         else:
             sink("I can't reach Claude right now and I have no local model to fall back on.")
+        self._last_claude_ts = time.monotonic()
         self._after_claude()
 
     def _after_claude(self) -> None:
         self.status = "listening"
-        self.allow_followup()
+        self.allow_followup(12)     # a spoken answer invites a follow-up; keep the mic open a bit longer
 
     # ---- wake-word detection on the transcript -----------------------------------
     WAKE_RE = re.compile(r"^\W*(?:hey|hi|ok|okay|yo)?\W*(sheru|sharu|shiru|shero|sheroo|cheru|shiro|sherry|sheroux)\b[\s,.!?]*", re.I)

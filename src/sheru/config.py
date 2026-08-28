@@ -43,6 +43,21 @@ WAKE_WORDS = ("hey sheru", "sheru")
 LOCAL_LLM = os.environ.get("SHERU_LLM", "mlx-community/Qwen3-4B-4bit")          # resident tier (4B: lighter/faster on 16GB; set SHERU_LLM=mlx-community/Qwen3-8B-4bit for 8B)
 LOCAL_LLM_FAST = os.environ.get("SHERU_LLM_FAST") or None                       # optional light tier; set to e.g. mlx-community/Qwen3-4B-4bit
 
+
+def _claude_config_dir() -> str | None:
+    """Which Claude login Tier-2 (`claude -p`) uses. The GUI/login-item launch inherits an EMPTY
+    CLAUDE_CONFIG_DIR and silently falls back to ~/.claude — which may be a different org with Claude Code
+    DISABLED, so every escalation fails and Sheru drops to the dumb local answer. Pin it to the real login.
+    Override with SHERU_CLAUDE_CONFIG_DIR or profile 'claude_config_dir'; else auto-detect ~/.claude-ashish."""
+    v = os.environ.get("SHERU_CLAUDE_CONFIG_DIR") or _P.get("claude_config_dir")
+    if v:
+        return str(Path(v).expanduser())
+    cand = Path.home() / ".claude-ashish"
+    return str(cand) if cand.is_dir() else None
+
+
+CLAUDE_CONFIG_DIR = _claude_config_dir()
+
 # Browser / search preferences (mutable at runtime by voice: "use google")
 BROWSER_APP = "Zen"
 ZEN_PROFILES_INI = Path.home() / "Library/Application Support/zen/profiles.ini"
@@ -62,7 +77,7 @@ IMAGE_SEARCH = {
 # Download better male voices in System Settings > Accessibility > Spoken Content > System Voice > Manage Voices
 # (good picks: "Aaron (Enhanced)", any "Siri Voice" male, or "Rishi (Enhanced)" for Indian English).
 TTS_VOICE = os.environ.get("SHERU_VOICE") or None
-TTS_PITCH = float(os.environ.get("SHERU_PITCH", "1.22"))         # 1.0 = normal; ~1.2-1.35 reads younger
-TTS_RATE = float(os.environ.get("SHERU_RATE", "0.52"))
-TTS_PREFERRED = ("Aaron", "Rishi", "Tom", "Daniel", "Fred")     # male, best-quality match wins
+TTS_PITCH = float(os.environ.get("SHERU_PITCH", "1.0"))          # 1.0 = normal. >1.15 up-pitches but WARBLES on AVSpeech (the "wobble"); leave at 1.0 for a clean male voice
+TTS_RATE = float(os.environ.get("SHERU_RATE", "0.5"))
+TTS_PREFERRED = ("Rishi", "Daniel", "Fred", "Aaron", "Tom")     # male, best-quality match wins (Rishi = enhanced Indian-English, installed)
 NAME_SPOKEN = "Sheroo"                                           # how Sheru pronounces its own name

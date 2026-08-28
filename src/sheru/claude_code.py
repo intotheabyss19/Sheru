@@ -12,6 +12,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
+from . import config
+
 CLAUDE = shutil.which("claude") or str(Path.home() / ".local/bin/claude")
 DEFAULT_TOOLS = "WebSearch,WebFetch,Read,Grep,Glob,LS"
 _SENTENCE = re.compile(r"(.+?[.!?])(?:\s+|$)")
@@ -43,6 +45,8 @@ class ClaudeSession:
         env = {k: v for k, v in os.environ.items()
                if not (k.startswith("CLAUDE_CODE") or k == "CLAUDECODE" or k in ("CLAUDE_PID", "CLAUDE_EFFORT"))}
         env.pop("ANTHROPIC_API_KEY", None)  # subscription auth only
+        if config.CLAUDE_CONFIG_DIR:        # pin the personal login; default ~/.claude may be an org with Claude Code disabled
+            env["CLAUDE_CONFIG_DIR"] = config.CLAUDE_CONFIG_DIR
 
         errored = [None]
         watchdog = [None]
@@ -124,4 +128,7 @@ def open_interactive(prompt: str, cwd: Path | None = None, resume: bool = False)
     if resume:
         args.append("--continue")
     args.append(prompt)
-    subprocess.Popen(args)
+    env = {**os.environ}
+    if config.CLAUDE_CONFIG_DIR:            # same personal-login pin for the interactive trainer window
+        env["CLAUDE_CONFIG_DIR"] = config.CLAUDE_CONFIG_DIR
+    subprocess.Popen(args, env=env)
