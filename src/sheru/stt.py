@@ -1,4 +1,11 @@
-"""Speech-to-text on-device. Backend: parakeet-mlx (English), fed numpy audio directly (no ffmpeg, no temp files)."""
+"""Speech-to-text on-device.
+
+Two backends (SHERU_STT):
+- "parakeet" (default): parakeet-mlx, fast, but English/European only — it MANGLES Hindi (the #1 source of
+  wrong songs/names in real use: "Sunya song by Kalashkir" -> "Sienna by The Marías").
+- "whisper": mlx-whisper large-v3-turbo, auto-detects language so it handles Hindi + English + Hinglish
+  code-switching. Slower (~0.5-1.5s) but correct for a Hindi/English user. Set SHERU_STT=whisper to enable.
+"""
 from __future__ import annotations
 
 import os
@@ -11,16 +18,19 @@ from . import config
 
 class Transcriber:
     def __init__(self, backend: str | None = None) -> None:
-        self.backend = backend or os.environ.get("SHERU_STT", "parakeet")
+        self.backend = backend or config.STT_BACKEND
         self._model = None
         self.last_latency = 0.0
 
     def load(self) -> "Transcriber":
         if self._model is None:
-            from parakeet_mlx import from_pretrained
-            from . import mlx_pool
-            self._model = mlx_pool.run(from_pretrained,
-                                       os.environ.get("SHERU_PARAKEET", "mlx-community/parakeet-tdt-0.6b-v3"))
+            if self.backend == "whisper":
+                self._model = "whisper"      # mlx-whisper loads + caches the model itself on first transcribe
+            else:
+                from parakeet_mlx import from_pretrained
+                from . import mlx_pool
+                self._model = mlx_pool.run(from_pretrained,
+                                           os.environ.get("SHERU_PARAKEET", "mlx-community/parakeet-tdt-0.6b-v3"))
         return self
 
     def transcribe(self, audio: np.ndarray) -> str:
@@ -31,14 +41,23 @@ class Transcriber:
         peak = float(np.abs(audio).max())
         if 0.002 < peak < 0.4:
             audio = np.clip(audio * (0.5 / peak), -1.0, 1.0).astype(np.float32)
-        import mlx.core as mx
-        from parakeet_mlx.audio import get_logmel
         self.load()
         from . import mlx_pool
         t0 = time.perf_counter()
-        def _do():
-            mel = get_logmel(mx.array(audio.astype(np.float32)), self._model.preprocessor_config)
-            return self._model.generate(mel)[0].text
-        text = mlx_pool.run(_do)
+        if self.backend == "whisper":
+            import mlx_whisper
+            repo = os.environ.get("SHERU_WHISPER", "mlx-community/whisper-large-v3-turbo")
+            audio = audio.astype(np.float32)
+            def _do():
+                # language=None -> auto-detect; handles Hindi, English, and Hinglish code-switching
+                return mlx_whisper.transcribe(audio, path_or_hf_repo=repo)["text"]
+            text = mlx_pool.run(_do)
+        else:
+            import mlx.core as mx
+            from parakeet_mlx.audio import get_logmel
+            def _do():
+                mel = get_logmel(mx.array(audio.astype(np.float32)), self._model.preprocessor_config)
+                return self._model.generate(mel)[0].text
+            text = mlx_pool.run(_do)
         self.last_latency = time.perf_counter() - t0
         return text.strip()

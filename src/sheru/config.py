@@ -40,8 +40,11 @@ def update_profile(key: str, value) -> None:
 
 SAMPLE_RATE = 16_000
 WAKE_WORDS = ("hey sheru", "sheru")
-LOCAL_LLM = os.environ.get("SHERU_LLM", "mlx-community/Qwen3-4B-4bit")          # resident tier (4B: lighter/faster on 16GB; set SHERU_LLM=mlx-community/Qwen3-8B-4bit for 8B)
+LOCAL_LLM = os.environ.get("SHERU_LLM") or _P.get("llm_model") or "mlx-community/Qwen3-4B-4bit"   # resident tier. 4B routes as well as 8B (verified) and is snappier; set profile 'llm_model' or SHERU_LLM=mlx-community/Qwen3-8B-4bit for warmer chit-chat
 LOCAL_LLM_FAST = os.environ.get("SHERU_LLM_FAST") or None                       # optional light tier; set to e.g. mlx-community/Qwen3-4B-4bit
+# STT backend: "parakeet" (fast, English/European only) or "whisper" (Hindi + English + Hinglish, slower). Real
+# Hindi NEEDS whisper — parakeet mangles it into garbage. Set profile 'stt_backend' or SHERU_STT=whisper.
+STT_BACKEND = os.environ.get("SHERU_STT") or _P.get("stt_backend") or "parakeet"
 
 
 def _claude_config_dir() -> str | None:
