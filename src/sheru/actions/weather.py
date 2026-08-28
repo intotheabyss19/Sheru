@@ -21,8 +21,7 @@ def fetch(city: str) -> str | None:
         desc = cur["weatherDesc"][0]["value"].strip().lower()
         temp = cur["temp_C"]
         feels = cur["FeelsLikeC"]
-        area = (d.get("nearest_area") or [{}])[0]
-        place = ((area.get("areaName") or [{}])[0].get("value") or city).strip()
+        place = city.strip()                       # say the place the user asked for, not wttr's obscure nearest station
         tail = f", feels like {feels}" if feels and feels != temp else ""
         return f"It's {temp} degrees in {place} right now, {desc}{tail}."
     except Exception:

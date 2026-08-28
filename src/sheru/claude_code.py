@@ -27,6 +27,7 @@ class ClaudeSession:
     max_turns: int = 25
     session_id: str | None = None
     _proc: subprocess.Popen | None = None
+    _running: bool = False        # True from run() until the pump thread has created _proc (no startup race on `busy`)
 
     def run(self, task: str, on_sentence: Callable[[str], None], on_done: Callable[[str], None] | None = None,
             on_error: Callable[[str], None] | None = None, resume: bool = False,
@@ -50,12 +51,15 @@ class ClaudeSession:
 
         errored = [None]
         watchdog = [None]
+        self._running = True          # synchronous, so busy is True the instant run() returns (the pump thread sets _proc async)
 
         def _pump():
             try:
                 self._proc = subprocess.Popen(args, cwd=self.cwd, env=env, stdout=subprocess.PIPE,
                                               stderr=subprocess.PIPE, text=True, bufsize=1)
+                self._running = False     # _proc now exists; its poll() is the busy signal from here
             except OSError as e:
+                self._running = False
                 (on_error or on_sentence)(str(e))
                 return
             def _timeout():
@@ -117,7 +121,7 @@ class ClaudeSession:
 
     @property
     def busy(self) -> bool:
-        return self._proc is not None and self._proc.poll() is None
+        return self._running or (self._proc is not None and self._proc.poll() is None)
 
 
 def open_interactive(prompt: str, cwd: Path | None = None, resume: bool = False) -> None:
