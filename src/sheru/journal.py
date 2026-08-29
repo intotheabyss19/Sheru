@@ -39,12 +39,30 @@ class Journal:
                 self._flush(self._last, feedback="negative", note="cancelled")
             else:
                 self._flush(self._last, feedback="unlabeled")
-        entry = {"ts": round(ts, 3), "utterance": utterance, "tier": tier, "tool": tool,
-                 "args": args, "speech": speech, "handoff": handoff, "feedback": None}
+        # what Sheru DID: the concrete action + a short outcome, so the log shows input -> action, not just input
+        action = tool or ("claude" if handoff else "chat")
+        detail = (handoff or speech or "").strip()
+        ok = not re.search(r"\b(couldn'?t|can'?t|failed|no such|didn'?t|not found|i don'?t have|ran into a problem)\b",
+                           speech or "", re.I)
+        entry = {"ts": round(ts, 3), "utterance": utterance, "tier": tier, "tool": tool, "action": action,
+                 "args": args, "speech": speech, "handoff": handoff, "ok": ok, "feedback": None}
         if latency is not None: entry["latency"] = round(latency, 2)
         if stt_latency is not None: entry["stt"] = round(stt_latency, 2)
+        self._append_readable(ts, utterance, action, detail, ok)
         self._last = entry
         return entry
+
+    def _append_readable(self, ts: float, utterance: str, action: str, detail: str, ok: bool) -> None:
+        """A human-friendly one-line-per-turn log (input -> what Sheru did), easy to `tail` and review."""
+        try:
+            mark = "ok " if ok else "FAIL"
+            line = (f"{time.strftime('%H:%M:%S', time.localtime(ts))} [{mark}] "
+                    f"IN: {utterance!r:.80}  ->  DID: [{action}] {detail[:90]}\n")
+            with self._lock:
+                with open(Path(config.DATA_DIR) / "actions.log", "a") as f:
+                    f.write(line)
+        except Exception:
+            pass
 
     def label_last(self, feedback: str, note: str = "") -> None:
         """Explicit feedback hook (e.g. a voiced 'yes that's right' / 'no')."""

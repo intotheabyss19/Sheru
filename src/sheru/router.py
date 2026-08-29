@@ -116,7 +116,10 @@ class Router:
         for pat, kind in self.RULES:
             m = pat.match(t)
             if m:
-                return self._tier0(kind, m)
+                res = self._tier0(kind, m)
+                if res.tool is None:
+                    res.tool = kind          # so the journal logs WHICH action fired, not None, for grammar hits
+                return res
         return self._tier1(t)
 
     def _tier0(self, kind: str, m: re.Match) -> Result:
