@@ -327,6 +327,10 @@ def view_for(style: str):
 
 
 def main():
+    try:
+        sys.stdout.reconfigure(line_buffering=True)   # os._exit below discards a block-buffered pipe otherwise
+    except Exception:
+        pass
     style = next((s for s in sys.argv[1:] if s in STYLES), "orb")
     app = NSApplication.sharedApplication()
     orb = ListeningOrb.alloc().initWithOnClick_(lambda: print("clicked -> (would open chat)"))
