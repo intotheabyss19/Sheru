@@ -31,7 +31,7 @@ _MATERIAL_POPOVER = 6       # NSVisualEffectMaterialPopover
 _BLEND_BEHIND = 0           # behindWindow
 _STATE_ACTIVE = 1           # active
 
-W, H, PAD, INPUT_H = 660, 300, 18, 44
+W, H, PAD, INPUT_H = 720, 540, 18, 44   # taller: it's a chat interface now, so the transcript needs room
 
 
 class _Panel(NSPanel):
