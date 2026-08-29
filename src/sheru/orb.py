@@ -25,7 +25,7 @@ from Foundation import NSMakeRect, NSObject, NSPoint
 from PyObjCTools import AppHelper
 from Quartz import CAGradientLayer, CABasicAnimation, CATransaction, CATransform3DMakeScale
 
-ORB = 180                    # window + orb diameter (px)
+ORB = 90                     # window + orb diameter (px) — half of the first pass (Yash: "half the radius")
 _amp = {"v": 0.0}            # shared live mic amplitude 0..1 (smoothed), written by the sampler thread
 
 
@@ -52,7 +52,7 @@ class _OrbView(NSView):
         orb.setFrame_(NSMakeRect(cx - r, cy - r, 2 * r, 2 * r))
         orb.setCornerRadius_(r)
         orb.setShadowColor_(NSColor.colorWithSRGBRed_green_blue_alpha_(0.5, 0.6, 1.0, 1.0).CGColor())
-        orb.setShadowRadius_(24.0)
+        orb.setShadowRadius_(r * 0.4)                         # glow scales with the orb
         orb.setShadowOpacity_(0.9)
         orb.setShadowOffset_((0, 0))
         self.layer().addSublayer_(orb)
