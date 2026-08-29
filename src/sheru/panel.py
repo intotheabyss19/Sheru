@@ -1,8 +1,9 @@
 """'Type to Sheru' — a Spotlight-style glassy panel to type a request and see the reply silently.
 
-Frosted-glass (NSVisualEffectView) non-activating floating panel with rounded corners, like macOS system
-UI. Enter submits; the request runs through the same pipeline as voice, output shown as text (no speech).
-Escape hides it.
+Frosted-glass (NSVisualEffectView) non-activating floating panel with rounded corners, like macOS Spotlight.
+Enter submits; the request runs the same pipeline as voice, output shown as text (no speech). Behaviours that
+make it feel like Spotlight: it DISMISSES when you click away (resigns key), and when empty it shows your
+RECENT history + actions instead of a blank box. Escape also hides it.
 """
 from __future__ import annotations
 
@@ -11,7 +12,7 @@ from typing import Callable
 import objc
 from AppKit import (
     NSPanel, NSTextField, NSTextView, NSScrollView, NSBox, NSColor, NSFont, NSApp, NSButton,
-    NSVisualEffectView,
+    NSVisualEffectView, NSAttributedString, NSFontAttributeName, NSForegroundColorAttributeName,
     NSWindowStyleMaskBorderless, NSWindowStyleMaskNonactivatingPanel,
     NSFloatingWindowLevel, NSWindowCollectionBehaviorCanJoinAllSpaces,
     NSWindowCollectionBehaviorStationary, NSBackingStoreBuffered,
@@ -27,7 +28,7 @@ _MATERIAL_POPOVER = 6       # NSVisualEffectMaterialPopover
 _BLEND_BEHIND = 0           # behindWindow
 _STATE_ACTIVE = 1           # active
 
-W, H, PAD, INPUT_H = 660, 260, 18, 44
+W, H, PAD, INPUT_H = 660, 300, 18, 44
 
 
 class _Panel(NSPanel):
@@ -48,7 +49,13 @@ class TypePanel(NSObject):
         self._on_submit = on_submit
         self._on_mic = on_mic
         self._panel = None
+        self._history_provider = None      # () -> [(utterance, reply), ...] newest-first
+        self._live = False                 # True while showing a live reply (so recent view doesn't clobber it)
         return self
+
+    @objc.python_method
+    def set_history_provider(self, fn):
+        self._history_provider = fn
 
     @objc.python_method
     def _build(self):
@@ -62,6 +69,7 @@ class TypePanel(NSObject):
         p.setBackgroundColor_(NSColor.clearColor())
         p.setHasShadow_(True)
         p.setMovableByWindowBackground_(True)
+        p.setDelegate_(self)               # so windowDidResignKey_ can dismiss on click-away
 
         # frosted-glass backing with rounded corners
         vev = NSVisualEffectView.alloc().initWithFrame_(NSMakeRect(0, 0, W, H))
@@ -101,7 +109,7 @@ class TypePanel(NSObject):
         sep.setBoxType_(NSBoxSeparator)
         vev.addSubview_(sep)
 
-        # output — transparent scrollable text
+        # output — transparent scrollable text (recent history when idle, the reply when live)
         scroll = NSScrollView.alloc().initWithFrame_(NSMakeRect(PAD, PAD + 14, W - 2 * PAD, H - 2 * PAD - INPUT_H - 34))
         scroll.setHasVerticalScroller_(True)
         scroll.setAutohidesScrollers_(True)
@@ -126,12 +134,44 @@ class TypePanel(NSObject):
         p.center()
         self._panel = p
 
+    # ---- attributed-text helpers for the recent list --------------------------------
+    @objc.python_method
+    def _attr(self, text, color, size, weight=None):
+        font = NSFont.systemFontOfSize_(size) if weight is None else NSFont.systemFontOfSize_weight_(size, weight)
+        return NSAttributedString.alloc().initWithString_attributes_(
+            text, {NSFontAttributeName: font, NSForegroundColorAttributeName: color})
+
+    @objc.python_method
+    def _render_recent(self):
+        """Show recent commands + results (Spotlight-style) when the panel is idle/empty."""
+        items = []
+        if self._history_provider is not None:
+            try:
+                items = self._history_provider() or []
+            except Exception:
+                items = []
+        ts = self._out.textStorage()
+        ts.beginEditing()
+        ts.setAttributedString_(NSAttributedString.alloc().initWithString_(""))
+        if not items:
+            ts.appendAttributedString_(self._attr("Type a command, or tap the mic.", NSColor.secondaryLabelColor(), 15))
+        else:
+            ts.appendAttributedString_(self._attr("RECENT\n", NSColor.tertiaryLabelColor(), 11))
+            for u, r in items:
+                ts.appendAttributedString_(self._attr("❯  " + u + "\n", NSColor.labelColor(), 15))
+                if r:
+                    ts.appendAttributedString_(self._attr("    " + r + "\n", NSColor.secondaryLabelColor(), 13))
+                ts.appendAttributedString_(self._attr("\n", NSColor.clearColor(), 4))
+        ts.endEditing()
+        self._out.scrollRangeToVisible_((0, 0))
+
     @objc.python_method
     def show(self):
         if self._panel is None:
             self._build()
-        self._out.setString_("")
+        self._live = False
         self._field.setStringValue_("")
+        self._render_recent()
         NSApp.activateIgnoringOtherApps_(True)
         self._panel.makeKeyAndOrderFront_(None)
         self._panel.makeFirstResponder_(self._field)
@@ -140,6 +180,10 @@ class TypePanel(NSObject):
     def hide(self):
         if self._panel is not None:
             self._panel.orderOut_(None)
+
+    # dismiss on click-away (Spotlight behaviour): the panel resigns key -> hide it
+    def windowDidResignKey_(self, notification):
+        self.hide()
 
     @objc.python_method
     def set_status(self, text: str):
@@ -151,6 +195,7 @@ class TypePanel(NSObject):
     @objc.python_method
     def _set_out(self, text: str):
         def do():
+            self._live = True
             self._out.setString_(text)
             self._out.scrollRangeToVisible_((len(self._out.string()), 0))
         AppHelper.callAfter(do)
@@ -158,8 +203,9 @@ class TypePanel(NSObject):
     @objc.python_method
     def _append(self, text: str):
         def do():
+            self._live = True
             cur = self._out.string()
-            cur = "" if cur == "…" else cur
+            cur = "" if cur in ("…", "") else cur
             self._out.setString_((cur + (" " if cur and not cur.endswith((" ", "\n")) else "") + text))
             self._out.scrollRangeToVisible_((len(self._out.string()), 0))
         AppHelper.callAfter(do)

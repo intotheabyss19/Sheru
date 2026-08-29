@@ -357,7 +357,20 @@ class Sheru:
             self.panel = TypePanel.alloc().initWithSubmit_onMic_(
                 lambda text, sink: self.handle_text(text, sink=sink),
                 lambda: self.activate())
+            self.panel.set_history_provider(self.recent_interactions)
         self.panel.show()
+
+    def recent_interactions(self, n: int = 6) -> list:
+        """Recent (utterance, reply) pairs for the panel's Spotlight-style recent list (newest first)."""
+        pairs, pend = [], None
+        for m in self.router.history:
+            if m["role"] == "user":
+                pend = m["content"]
+            elif m["role"] == "assistant" and pend is not None:
+                pairs.append((pend, m["content"])); pend = None
+        if pend is not None:
+            pairs.append((pend, ""))
+        return list(reversed(pairs))[:n]
 
     def allow_followup(self, seconds: float = 6.0) -> None:
         self.followup_until = time.monotonic() + seconds
