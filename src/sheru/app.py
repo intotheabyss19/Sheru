@@ -56,6 +56,14 @@ class Sheru:
         """Handle one request. `sink` routes the reply: speaker.speak (voice) or a text callback (typed panel)."""
         sink = sink or self.speaker.speak
         log.info("heard: %s", text)
+        from . import alarms
+        low0 = re.sub(r"[.!?]+$", "", text.strip().lower())
+        if alarms.is_ringing() and (low0 in {"stop", "dismiss", "dismiss it", "ok", "okay", "stop it", "silence",
+                                             "enough", "turn it off", "shut up", "quiet", "snooze", "cancel"}
+                                    or low0.startswith(("stop", "dismiss", "turn it off", "snooze", "shut up"))):
+            alarms.stop_ring()
+            sink("Alarm off.")
+            return "alarm-off"
         if self.pending is not None:
             return self._handle_pending(text, sink)
         import re as _re
@@ -371,6 +379,16 @@ class Sheru:
         if pend is not None:
             pairs.append((pend, ""))
         return list(reversed(pairs))[:n]
+
+    def show_alarms(self) -> None:
+        """Speak the active alarms/timers (menu-bar '⏰ Alarms' click)."""
+        from . import alarms
+        act = alarms.active()
+        if not act:
+            self.speaker.speak("You have no alarms or timers set.")
+            return
+        parts = [f"{a['label'].lower()} in {alarms.human_remaining(a['remaining'])}" for a in act[:5]]
+        self.speaker.speak(f"You have {len(act)} set: " + "; ".join(parts) + ".")
 
     def _present_draft(self, who: str, draft: str, sink) -> None:
         """Show a message draft as a Siri-style card in the panel (typed mode), else speak/append the prompt."""

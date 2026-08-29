@@ -55,9 +55,8 @@ def _persist(task, fire_ts):
 def schedule(task: str, seconds: float, on_fire, persist: bool = True) -> None:
     if persist:
         _persist(task, time.time() + seconds)
-    t = threading.Timer(max(1, seconds), lambda: on_fire(f"Reminder: {task}."))
-    t.daemon = True
-    t.start()
+    from . import alarms
+    alarms.schedule(task, seconds, on_fire, spoken=f"Reminder: {task}.")     # rings a bell + shows in the menu bar
 
 
 def restore(on_fire) -> int:

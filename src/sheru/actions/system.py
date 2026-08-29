@@ -41,10 +41,8 @@ def clipboard() -> str:
 
 
 def set_timer(seconds: int, on_fire, label: str = "timer") -> str:
-    t = threading.Timer(seconds, on_fire, args=(f"Your {label} is done.",))
-    t.daemon = True
-    t.start()
-    _TIMERS.append(t)
+    from .. import alarms
+    alarms.schedule(label.title(), int(seconds), on_fire, spoken=f"Your {label} is done.")   # rings a bell + shows in the menu bar
     m, s = divmod(int(seconds), 60)
     human = f"{m} minute{'s' if m != 1 else ''}" if m else ""
     human += (f" {s} seconds" if s and m else f"{s} seconds" if s else "")

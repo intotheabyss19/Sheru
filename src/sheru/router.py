@@ -87,6 +87,8 @@ class Router:
         (re.compile(r"^(mute|unmute)\b"), "mute"),
         (re.compile(r"^(play|pause|resume|next|skip|previous|back)(?:\s+(?:song|track|music))?$"), "media"),
         (re.compile(r"^(?:set\s+)?(?:a\s+)?timer\s+(?:for\s+)?(\S+)\s+(minutes?|mins?|seconds?|secs?|hours?)$"), "timer"),
+        (re.compile(r"^(?:set|create|put|start)?\s*(?:an?\s+)?alarm\b(?:\s+(?:for|at)\b)?\s*(.*)$"), "alarm"),
+        (re.compile(r"^wake me(?:\s+up)?\b(?:\s+(?:at|in)\b)?\s*(.*)$"), "alarm"),
         (re.compile(r"^(?:what(?:'s| is) the )?time(?: is it)?\??$|^what time is it|^(?:do you have|got|whats|tell me) the time\??$|^what'?s the time"), "time"),
         (re.compile(r".*\bclipboard\b.*|^what did i (?:copy|cut)$|^read (?:me )?(?:my|the) copied text$"), "clipboard"),
         (re.compile(r"^((?:write|create|generate|code|build|make)\s+.*\b(?:python|bash|shell|javascript|script|code|program|function|snippet)\b.*)$"), "claude"),
@@ -176,6 +178,17 @@ class Router:
             mult = 60 if g[1].startswith("m") else 3600 if g[1].startswith("h") else 1
             secs = int(_num(g[0]) * mult)
             return Result(system.set_timer(secs, self.say_async))
+        if kind == "alarm":
+            from . import reminders, alarms
+            raw = next((x for x in g if x), "").strip().rstrip(".")
+            if not raw:
+                return Result("When should the alarm be? Say 'set an alarm for 7 a.m.' or 'wake me in 20 minutes'.")
+            probe = raw if re.search(r"\b(in|at)\b", raw) else f"at {raw}"
+            secs, human = reminders.parse_when("alarm " + probe)
+            if secs is None:
+                return Result(f"I couldn't work out the time from '{raw}'. Try 'set an alarm for 7 a.m.'.")
+            alarms.schedule("Alarm", secs, self.say_async, spoken="This is your alarm.")
+            return Result(f"Alarm set {human}.", followup=True)
         if kind == "time":
             return Result(system.now())
         if kind == "clipboard":
