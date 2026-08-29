@@ -65,6 +65,7 @@ class Router:
         (re.compile(r"^(?:are you (?:listening|recording|there)|is recording (?:on|off)|what are you doing)\b.*"), "status"),
         (re.compile(r"^(?:stop|turn off|disable|pause)\s+recording\b.*|^stop saving\b.*"), "rec_off"),
         (re.compile(r"^(?:start|turn on|enable|resume)\s+recording\b.*"), "rec_on"),
+        (re.compile(r"^(?:stop|pause|halt)\s+(?:the\s+|this\s+|that\s+|my\s+)?(?:music|song|playback|track|video|audio)\b.*$"), "media_pause"),
         (re.compile(r"^(?:stop|cancel|never ?mind|shut up|quiet|enough)\b|^that'?s enough\b|^okay,? that'?s enough\b"), "stop"),
         (re.compile(r"^(?:that (?:was|is)\s+|you (?:did|were)\s+)?(?:very |really |so )?(good|great|perfect|nice|excellent|awesome|well done|correct)\b\.?$"), "feedback_good"),
         (re.compile(r"^(?:that (?:was|is)\s+|you (?:did|were)\s+)?(?:very |really |so )?(bad|wrong|terrible|awful|nope|useless|not good)\b\.?$"), "feedback_bad"),
@@ -101,7 +102,7 @@ class Router:
         (re.compile(r"^(?:switch|go|jump)\s+to\s+(?:the\s+)?(.+?)\s+profile$"), "profile"),
         (re.compile(r"^(?:use|switch to|search (?:with|on))\s+(google|duck ?duck ?go|bing)\b.*"), "engine"),
         (re.compile(r"^(?:switch|go|jump)\s+(?:over\s+)?(?:me\s+)?to\s+(?:the\s+)?(.+?)(?:\s+(?:app|application))?$"), "switch"),
-        (re.compile(r"^(?:show|find|get|search for|google|look up)\s+(?:me\s+)?(?:some\s+|for\s+)?(?:\w+\s+)?(?:pictures|images|photos)\s+of\s+(.+)$"), "images"),
+        (re.compile(r"^(?:show|find|get|search for|google|look up)\s+(?:me\s+)?(?:some\s+|for\s+)?(?:\w+\s+)?(?:pictures?|images?|photos?|pics?)\s+of\s+(.+)$"), "images"),
         (re.compile(r"^(?:set my location to|my location is|i live in|i'?m based in|i just moved to|i'?m now (?:in|at)|i moved to)\s+(.+)$"), "set_location"),
         (re.compile(r"^(?!play\b)(?!.*\bby\b).*\bweather\b.*"), "weather"),
         (re.compile(r"^(?!play\b)(?!.*\bby\b).*\b(news|headlines?|stocks?|stock price|share price|bitcoin|crypto|ethereum|nasdaq|dow jones|who won|score of|election results?|prime minister|president of|forecast|is it (?:going to )?rain(?:ing)?|will it rain|need an umbrella|temperature (?:outside|right now)|what'?s happening|going on (?:in the world|with the)|current (?:price|events))\b.*"), "current"),
@@ -109,13 +110,14 @@ class Router:
         (re.compile(r".*\b(?:exchange rate|conversion rate)\b.*|.*\b\d+(?:\.\d+)?\s*(?:euros?|dollars?|pounds?|yen|rupees?|usd|eur|gbp|inr|jpy)\b.*\b(?:in|to|into)\b\s*(?:inr|usd|eur|gbp|jpy|rupees?|dollars?|euros?|pounds?|yen)\b.*"), "current"),
         (re.compile(r"^(?:search|look up|google|find)\s+(?:for\s+)?(.+?)\s+(?:and|then)\s+summari[sz]e.*$"), "search_summarize"),
         (re.compile(r"^summari[sz]e(?:\s+(?:me|it|that|this|them|the results|the search|those))?(?:\s+(.+))?$"), "summarize"),
-        (re.compile(r"^(?:play|put on)\s+(?:some\s+)?(.+?)(?:\s+(?:on|in|using)\s+spotify)?$"), "play_song"),
+        (re.compile(r"^(?:play|put on|put)\s+(?:some\s+|the\s+|a\s+)?(?:song\s+|track\s+)?(.+?)(?:\s+(?:on|in|using)\s+spotify)?$"), "play_song"),
+        (re.compile(r"^(.+?)\s+(?:bajao|baja\s?do|chalao|chala\s?do|sunao|suna\s?do|lagao)$"), "play_song"),   # Hinglish 'play X'
         (re.compile(r"^(?:crank|pump)\s+(?:it|the volume|music)?\s*up$"), "vol_up"),
         (re.compile(r"^skip(?:\s+(?:this|it|song|track|forward))?(?:\s+one)?$"), "skip"),
         (re.compile(r"^(?:pull up|bring up)\s+(?:https?://)?((?:[\w-]+\.)+[a-z]{2,}(?:/\S*)?)$"), "url"),
         (re.compile(r"^(?:search|google|look up|look for|find)\s+(?:for\s+)?(.+?)(?:\s+on\s+(google|duck ?duck ?go|bing))?$"), "search"),
         (re.compile(r"^(?:set\s+)?(?:the\s+)?volume\s+(?:to\s+)?(\d{1,3})(?:\s*percent)?$"), "volume"),
-        (re.compile(r"^(?:turn\s+(?:it\s+)?|volume\s+)?(up|down)(?:\s+the\s+volume)?$|^(?:turn\s+)?(?:the\s+)?volume\s+(up|down)$"), "volume_delta"),
+        (re.compile(r"^(?:turn\s+(?:it\s+)?|volume\s+)?(up|down)(?:\s+the\s+(?:volume|sound|music|audio))?$|^(?:turn\s+)?(?:the\s+)?(?:volume|sound|music|audio)\s+(up|down)$|^make\s+it\s+(louder|quieter|softer|lower|loud|quiet|soft|low)$"), "volume_delta"),
         (re.compile(r"^(mute|unmute)\b"), "mute"),
         (re.compile(r"^(play|pause|resume|next|skip|previous|back)(?:\s+(?:song|track|music))?$"), "media"),
         # "schedule … for/at 3 pm" -> a clock-time alarm (only when a real time token is present, else it falls
@@ -124,7 +126,7 @@ class Router:
         (re.compile(r"^(?:set\s+)?(?:a\s+)?timer\s+(?:for\s+)?(\S+)\s+(minutes?|mins?|seconds?|secs?|hours?)$"), "timer"),
         (re.compile(r"^(?:set|create|put|start)?\s*(?:an?\s+)?alarm\b(?:\s+(?:for|at)\b)?\s*(.*)$"), "alarm"),
         (re.compile(r"^wake me(?:\s+up)?\b(?:\s+(?:at|in)\b)?\s*(.*)$"), "alarm"),
-        (re.compile(r"^(?:what(?:'s| is) the )?time(?: is it)?\??$|^what time is it|^(?:do you have|got|whats|tell me) the time\??$|^what'?s the time"), "time"),
+        (re.compile(r"^(?:what(?:'s| is)(?: the)? )?time(?:\s+(?:is it|now|right now))?\??$|^what time (?:is it|now)|^(?:do you have|got|whats|tell me)(?: the)? time\??$|^what'?s the time"), "time"),
         (re.compile(r".*\bclipboard\b.*|^what did i (?:just\s+)?(?:copy|cut)$|^read (?:me )?(?:my|the) copied text$"), "clipboard"),
         (re.compile(r"^((?:write|create|generate|code|build|make|animate|plot|draw|simulate|render)\s+.*\b(?:python|bash|shell|javascript|script|code|program|function|snippet|manim|animation|plot|chart|graph|figure|simulation|demo|numpy|pandas|matplotlib|visuali[sz]ation|algorithm)\b.*)$"), "claude"),
         # read the on-screen WhatsApp conversation (screenshot + Vision OCR)
@@ -269,7 +271,9 @@ class Router:
             return Result(system.set_volume(int(g[0])))
         if kind == "volume_delta":
             d = next(x for x in g if x)
-            return Result(system.change_volume(15 if d == "up" else -15))
+            return Result(system.change_volume(15 if d in ("up", "loud", "louder") else -15))
+        if kind == "media_pause":
+            return Result(system.media("pause"))
         if kind == "mute":
             return Result(system.mute(g[0] == "mute"))
         if kind == "media":
