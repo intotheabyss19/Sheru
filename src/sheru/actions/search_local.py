@@ -41,7 +41,12 @@ def fetch_results(query: str, n: int = 6) -> list[tuple[str, str]]:
 
 
 def search_and_summarize(query: str, llm) -> str | None:
-    """A 2-3 sentence spoken answer summarized from web snippets by the LOCAL model, or None to escalate."""
+    """A precise structured answer (FX/weather/news) when possible, else a 2-3 sentence spoken summary of web
+    snippets by the LOCAL model, or None to escalate."""
+    from . import structured
+    exact = structured.answer(query)                       # deterministic, exact, no LLM — try first
+    if exact:
+        return exact
     if llm is None:
         return None
     results = fetch_results(query)

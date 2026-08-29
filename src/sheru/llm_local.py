@@ -55,7 +55,7 @@ class LocalLLM:
         t0 = time.perf_counter()
         from . import mlx_pool
         with self._lock:
-            out = mlx_pool.run(generate, self._model, self._tok, prompt=prompt, max_tokens=160, verbose=False)
+            out = mlx_pool.run(generate, self._model, self._tok, prompt=prompt, max_tokens=256, verbose=False)
         self.last_latency = time.perf_counter() - t0
         m = _TOOL_RE.search(out)
         if m:
@@ -64,7 +64,22 @@ class LocalLLM:
                 return {"tool": call.get("name"), "args": call.get("arguments") or {}}
             except json.JSONDecodeError:
                 pass
+        # tolerant fallback: model emitted a tool call that didn't close cleanly (truncation, stray text)
+        loose = re.search(r"<tool_call>\s*(\{.*)", out, re.S)
+        if loose:
+            frag = loose.group(1).split("</tool_call>")[0]
+            brace = frag.rfind("}")
+            if brace != -1:
+                try:
+                    call = json.loads(frag[: brace + 1])
+                    return {"tool": call.get("name"), "args": call.get("arguments") or {}}
+                except json.JSONDecodeError:
+                    pass
+            return {"tool": "ask_claude", "args": {"task": text}}   # meant to call a tool; don't speak JSON — escalate
         out = re.sub(r"<think>.*?</think>", "", out, flags=re.S).strip()
+        out = re.sub(r"</?tool_call>", "", out).strip()            # never let a stray tag reach TTS
+        if out.startswith("{") and '"name"' in out:               # bare tool JSON without tags -> escalate, don't speak
+            return {"tool": "ask_claude", "args": {"task": text}}
         return {"say": out or "Sorry, I didn't get that."}
 
     def answer(self, text: str, history: list[dict] | None = None, extra_system: str = "") -> str:
