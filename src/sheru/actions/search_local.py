@@ -17,27 +17,43 @@ def _clean(s: str) -> str:
     return html.unescape(_TAG.sub("", s)).strip()
 
 
-def fetch_results(query: str, n: int = 6) -> list[tuple[str, str]]:
-    """(title, snippet) pairs from DuckDuckGo's HTML endpoint — no API key, no browser."""
+_UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", "Accept-Language": "en-US,en;q=0.9"}
+
+
+def _fetch_html(query: str) -> list[tuple[str, str]]:
+    """DuckDuckGo HTML endpoint — rich (title, snippet) pairs."""
     import requests
-    try:
-        page = requests.get(
-            "https://html.duckduckgo.com/html/?q=" + urllib.parse.quote(query),
-            headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
-                     "Accept-Language": "en-US,en;q=0.9"},
-            timeout=8).text
-    except Exception:
-        return []
+    page = requests.get("https://html.duckduckgo.com/html/?q=" + urllib.parse.quote(query),
+                        headers=_UA, timeout=8).text
     titles = re.findall(r'class="result__a"[^>]*>(.*?)</a>', page, re.S)
     snippets = re.findall(r'class="result__snippet"[^>]*>(.*?)</a>', page, re.S)
-    out = []
-    for t, s in zip(titles, snippets):
-        t, s = _clean(t), _clean(s)
-        if t and s:
-            out.append((t, s))
-        if len(out) >= n:
-            break
-    return out
+    return [(_clean(t), _clean(s)) for t, s in zip(titles, snippets)]
+
+
+def _fetch_lite(query: str) -> list[tuple[str, str]]:
+    """DuckDuckGo Lite — a different layout/host, used when the HTML endpoint is blocked or empty."""
+    import requests
+    page = requests.get("https://lite.duckduckgo.com/lite/?q=" + urllib.parse.quote(query),
+                        headers=_UA, timeout=8).text
+    links = re.findall(r'<a[^>]*\brel="nofollow"[^>]*>(.*?)</a>', page, re.S)
+    snips = re.findall(r'class="result-snippet"[^>]*>(.*?)</td>', page, re.S)
+    if snips:
+        return [(_clean(t), _clean(s)) for t, s in zip(links, snips)]
+    return [(_clean(t), _clean(t)) for t in links]         # titles only — still useful context for the summarizer
+
+
+def fetch_results(query: str, n: int = 6) -> list[tuple[str, str]]:
+    """(title, snippet) pairs — no API key, no browser. Falls back across endpoints so a single block
+    doesn't force an escalation to Claude."""
+    for fetch in (_fetch_html, _fetch_lite):
+        try:
+            pairs = fetch(query)
+        except Exception:
+            pairs = []
+        out = [(t, s) for t, s in pairs if t and s][:n]
+        if out:
+            return out
+    return []
 
 
 def search_and_summarize(query: str, llm) -> str | None:
