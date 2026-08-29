@@ -76,15 +76,18 @@ def open_app(name: str) -> str:
 def open_web(name: str) -> str:
     """Open a non-installed target as a website in the user's DEFAULT browser (bare `open` honours the macOS
     default handler — Zen, Safari, whatever they set — not Sheru's automation browser)."""
-    slug = re.sub(r"^(?:the|my)\s+", "", name.strip().lower()).strip().rstrip("?.!")
+    slug = re.sub(r"^(?:a|an|the|my)\s+", "", name.strip().lower()).strip().rstrip("?.!")
     if slug in WEB_SERVICES:
         url = WEB_SERVICES[slug]
     elif slug.startswith(("http://", "https://")):
         url = slug
     elif re.search(r"[a-z0-9-]+\.[a-z]{2,}(?:/\S*)?$", slug):     # already looks like a domain (netflix.com)
         url = "https://" + slug
+    elif len(slug.split()) <= 2:
+        url = "https://www." + re.sub(r"\s+", "", slug) + ".com"  # short brand name -> its site
     else:
-        url = "https://www." + re.sub(r"\s+", "", slug) + ".com"  # best-guess brand site
+        from . import web                                          # a descriptive phrase ("a wikipedia page
+        return web.search(name)                                    # about X") -> search it, not a made-up domain
     subprocess.run(["open", url], check=False)                    # no -a -> the user's default browser
     return f"Opening {url.split('//', 1)[-1].split('/')[0]} in your browser."
 
