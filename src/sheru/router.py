@@ -74,9 +74,6 @@ class Router:
         # local filesystem (no Claude needed): open a terminal in a dir, make folders/files
         (re.compile(r"^open\s+(?:a\s+|the\s+)?(?:terminal|ghostty|shell|command line|iterm)\s+(?:in|at|inside|here)\b\s*(.*)$"), "terminal_in"),
         (re.compile(r"^(?:make|create|new|touch|add)\s+(?:me\s+)?(?:a\s+|an\s+)?(?:new\s+)?((?:folder|directory|dir|file|text\s*file|txt\s*file|document|\.txt)\b.*)$"), "fs_make"),
-        # remember how to ADDRESS a contact in messages (saved nickname -> proper greeting)
-        (re.compile(r"^(?:address|refer to|greet)\s+(.+?)\s+as\s+(.+)$"), "set_address"),
-        (re.compile(r"^(?:when (?:messaging|texting)\s+)(.+?)\s*,?\s*(?:call|address|greet)\s+(?:her|him|them)?\s*(?:as\s+)?(.+)$"), "set_address"),
         # browser actions (Brave/piyush by default) — BEFORE the generic 'open' so 'open gmail' isn't an app-open
         (re.compile(r"^(?:play|put on|start|search)\s+(.+?)\s+on\s+(?:you ?tube music|yt music)\b.*$"), "yt_music"),
         (re.compile(r"^(?:play|put on|start)\s+(.+?)\s+on\s+(?:you ?tube|yt)\b.*$"), "youtube"),
@@ -118,7 +115,12 @@ class Router:
         (re.compile(r"^(?:what(?:'s| is) the )?time(?: is it)?\??$|^what time is it|^(?:do you have|got|whats|tell me) the time\??$|^what'?s the time"), "time"),
         (re.compile(r".*\bclipboard\b.*|^what did i (?:just\s+)?(?:copy|cut)$|^read (?:me )?(?:my|the) copied text$"), "clipboard"),
         (re.compile(r"^((?:write|create|generate|code|build|make|animate|plot|draw|simulate|render)\s+.*\b(?:python|bash|shell|javascript|script|code|program|function|snippet|manim|animation|plot|chart|graph|figure|simulation|demo|numpy|pandas|matplotlib|visuali[sz]ation|algorithm)\b.*)$"), "claude"),
-        (re.compile(r"^(?:message|text|msg|whatsapp|whats app|send)\s+(?:a\s+(?:message|text)\s+to\s+)?(.+?)\s+(?:that|saying|to say|to tell (?:him|her|them)|about)\s+(.+)$"), "message"),
+        # read the on-screen WhatsApp conversation (screenshot + Vision OCR)
+        (re.compile(r"^what\s+did\s+(.+?)\s+(?:say|reply|text|send|write|message)\b.*$"), "read_chat"),
+        (re.compile(r"^(?:read|check|show me)\s+(?:me\s+)?(?:the\s+|my\s+|her\s+|his\s+|their\s+)?(?:whatsapp\s+)?(?:conversation|chat|replies|reply|messages?|texts?)(?:\s+(?:with|from)\s+(.+))?$"), "read_chat"),
+        (re.compile(r"^(?:what'?s|any)\s+(?:her|his|their|the)\s+(?:latest\s+)?(?:reply|response|messages?)\b.*$"), "read_chat"),
+        (re.compile(r"^(?:message|text|msg|whatsapp|whats app|send)\s+(?:a\s+(?:message|text)\s+)?(?:to\s+)?([a-z][\w'’.\-]*(?:\s+[a-z][\w'’.\-]*){0,2})\s+(?:that|saying|to say|to tell (?:him|her|them)|about)\s+(.+)$"), "message"),
+        (re.compile(r"^(?:message|text|msg|whatsapp|whats app|send)\s+(?:a\s+(?:message|text)\s+)?to\s+([a-z][\w'’.\-]*(?:\s+[a-z][\w'’.\-]*){0,2}?)\s+(.+)$"), "message"),
         (re.compile(r"^(?:message|text|msg|whatsapp|whats app)\s+(\w+)\s+(.+)$"), "message"),
         (re.compile(r"^remind me (?:to |that )?(.+)$"), "remind"),
         (re.compile(r"^(?:remember|note|keep in mind)(?:\s+that)?\s+(?!when\b)(.+)$"), "remember"),
@@ -347,6 +349,14 @@ class Router:
             from .actions import trainer
             issue = next((x for x in g if x), "")
             return Result(trainer.open_trainer(issue))
+        if kind == "read_chat":
+            from .actions import messaging, whatsapp_read
+            who = next((x.strip() for x in g if x), None)
+            if who and who.lower() not in ("i", "you", "we", "they", "u"):
+                c = messaging.resolve_contact(who)
+                if c and c.get("handle"):
+                    return Result(whatsapp_read.read_chat_with(c["handle"]), followup=True)
+            return Result(whatsapp_read.read_open_chat(), followup=True)
         if kind == "message":
             if re.search(r"whats\s?app", m.group(0)):
                 app_kind = "whatsapp"
@@ -358,14 +368,6 @@ class Router:
         if kind == "remember":
             msg = self.memory.remember(g[0]) if self.memory else "I don't have a memory store yet."
             return Result(msg)
-        if kind == "set_address":
-            from .actions import contacts_book
-            who = (g[0] or "").strip().rstrip(".")
-            addr = (g[1] or "").strip().strip("'\"").rstrip(".").title()   # route() lowercased it -> restore caps
-            if not who or not addr:
-                return Result("Say it like: address Crocodile as Madam.")
-            contacts_book.set_address(who, addr)
-            return Result(f"Got it — I'll address {who.title()} as {addr} in messages.")
         if kind == "claude":
             task = (g[0] or "").strip()
             from .actions import generate
@@ -408,6 +410,10 @@ class Router:
                     return Result("Let me find that song…", resolve_song=a["query"], followup=True)
             elif tool == "draft_message":
                 return Result("", draft={"recipient": a.get("recipient", ""), "gist": a.get("message", a.get("gist", "")), "app": a.get("app") or _default_msg_app()})
+            elif tool == "set_address":
+                from .actions import contacts_book
+                contacts_book.set_address(a["name"], a["address"])
+                r = f"Got it — I'll address {a['name'].strip().title()} as {a['address'].strip().title()} in messages."
             elif tool == "ask_claude": return Result("On it.", handoff=a["task"], tier=2)
             else:                      return Result("I'll ask Claude.", handoff=t, tier=2)
         except (KeyError, ValueError, TypeError):
