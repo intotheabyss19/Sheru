@@ -24,7 +24,7 @@ from AppKit import (
 )
 from Foundation import NSMakeRect, NSObject, NSPoint
 from PyObjCTools import AppHelper
-from Quartz import CAGradientLayer, CAEmitterLayer, CAEmitterCell, CATransaction, CATransform3DMakeScale
+from Quartz import CALayer, CAGradientLayer, CAEmitterLayer, CAEmitterCell, CATransaction, CATransform3DMakeScale
 
 WIN, ORB = 140, 50           # WIN = transparent window sized to sit flush in the corner (room for the glow +
 #                              swell, no clipping, no menu-bar overlap); ORB = the orb disc diameter
@@ -208,6 +208,92 @@ class _ParticleView(NSView):
             self._on_click()
 
 
+_SUN = (1.0, 0.62, 0.16, 1.0)      # lion/sun accent shared by the rings + bars
+
+
+# ---- rings: concentric rings that ripple outward, faster/brighter with your voice ----------------------------
+class _RingsView(NSView):
+    def initWithFrame_click_(self, frame, on_click):
+        self = objc.super(_RingsView, self).initWithFrame_(frame)
+        if self is None:
+            return None
+        self._on_click = on_click
+        self.setWantsLayer_(True)
+        self.layer().setMasksToBounds_(False)
+        r = ORB / 2 * 0.6
+        cx, cy = WIN / 2, WIN / 2
+        col = NSColor.colorWithSRGBRed_green_blue_alpha_(*_SUN).CGColor()
+        self._rings = []
+        for _ in range(4):
+            ring = CALayer.layer()
+            ring.setFrame_(NSMakeRect(cx - r, cy - r, 2 * r, 2 * r))
+            ring.setCornerRadius_(r)
+            ring.setBorderWidth_(3.0)
+            ring.setBorderColor_(col)
+            ring.setBackgroundColor_(NSColor.clearColor().CGColor())
+            self.layer().addSublayer_(ring)
+            self._rings.append(ring)
+        self._phase = 0.0
+        return self
+
+    @objc.python_method
+    def apply_level(self, v):
+        v = max(0.0, min(1.0, v))
+        self._phase = (self._phase + 0.010 + 0.055 * v) % 1.0     # ripple faster as you speak
+        n = len(self._rings)
+        CATransaction.begin()
+        CATransaction.setDisableActions_(True)
+        for i, ring in enumerate(self._rings):
+            f = (self._phase + i / float(n)) % 1.0                # 0..1 progress, staggered per ring
+            ring.setTransform_(_scale(1.0 + 1.9 * f))             # expand outward
+            ring.setOpacity_(float(max(0.0, 1.0 - f) * (0.35 + 0.65 * v)))
+        CATransaction.commit()
+
+    def mouseDown_(self, event):
+        if self._on_click:
+            self._on_click()
+
+
+# ---- bars: a little waveform of bars that dance with your voice ----------------------------------------------
+class _BarsView(NSView):
+    def initWithFrame_click_(self, frame, on_click):
+        self = objc.super(_BarsView, self).initWithFrame_(frame)
+        if self is None:
+            return None
+        self._on_click = on_click
+        self.setWantsLayer_(True)
+        self.layer().setMasksToBounds_(False)
+        n, bw, gap = 5, 8, 7
+        x0 = WIN / 2 - (n * bw + (n - 1) * gap) / 2
+        col = NSColor.colorWithSRGBRed_green_blue_alpha_(1.0, 0.66, 0.18, 1.0).CGColor()
+        self._bars = []
+        for i in range(n):
+            bar = CALayer.layer()
+            bar.setBackgroundColor_(col)
+            bar.setCornerRadius_(bw / 2)
+            bar.setFrame_(NSMakeRect(x0 + i * (bw + gap), WIN / 2 - 8, bw, 16))
+            self.layer().addSublayer_(bar)
+            self._bars.append((bar, x0 + i * (bw + gap), bw))
+        return self
+
+    @objc.python_method
+    def apply_level(self, v):
+        v = max(0.0, min(1.0, v))
+        t = time.monotonic()
+        cy = WIN / 2
+        CATransaction.begin()
+        CATransaction.setDisableActions_(True)
+        for i, (bar, x, bw) in enumerate(self._bars):
+            amp = (0.25 + 0.75 * v) * (0.4 + 0.6 * (0.5 + 0.5 * math.sin(t * 7.0 + i * 1.3)))
+            h = 12 + amp * 66
+            bar.setFrame_(NSMakeRect(x, cy - h / 2, bw, h))
+        CATransaction.commit()
+
+    def mouseDown_(self, event):
+        if self._on_click:
+            self._on_click()
+
+
 # ---- standalone preview: shows the orb reacting to your mic for ~20s ------------------------------------------
 def _mic_sampler():
     """Fill _amp['v'] with a smoothed live mic level (0..1) so the preview is audio-reactive."""
@@ -232,13 +318,20 @@ def _mic_sampler():
         print("mic sampler off:", e)
 
 
+STYLES = ("orb", "particles", "rings", "bars")
+
+
+def view_for(style: str):
+    """Map a style name to its listening-animation NSView class (shared by the app + the preview)."""
+    return {"orb": _OrbView, "particles": _ParticleView, "rings": _RingsView, "bars": _BarsView}.get(style, _OrbView)
+
+
 def main():
-    particles = "particles" in sys.argv[1:] or "p" in sys.argv[1:]
+    style = next((s for s in sys.argv[1:] if s in STYLES), "orb")
     app = NSApplication.sharedApplication()
     orb = ListeningOrb.alloc().initWithOnClick_(lambda: print("clicked -> (would open chat)"))
-    if particles:
-        orb._view_cls = _ParticleView
-    print(f"style: {'particles' if particles else 'orb'}  (use `python -m sheru.orb particles` for the other)")
+    orb._view_cls = view_for(style)
+    print(f"style: {style}   (try: " + " | ".join(f"python -m sheru.orb {k}" for k in STYLES) + ")")
     orb.show()
     threading.Thread(target=_mic_sampler, daemon=True).start()
 

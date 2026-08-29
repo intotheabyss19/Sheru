@@ -426,7 +426,7 @@ class Sheru:
     def _ensure_orb(self) -> None:
         """Create/rebuild the listening orb for the current style (config.ORB_STYLE: 'orb'|'particles')."""
         from . import config
-        from .orb import ListeningOrb, _OrbView, _ParticleView
+        from .orb import ListeningOrb, view_for
         want = config.ORB_STYLE
         if self.orb is None or self._orb_style != want:
             if self.orb is not None:
@@ -435,7 +435,7 @@ class Sheru:
                 except Exception:
                     pass
             self.orb = ListeningOrb.alloc().initWithOnClick_(self._orb_clicked)
-            self.orb._view_cls = _ParticleView if want == "particles" else _OrbView
+            self.orb._view_cls = view_for(want)
             self._orb_style = want
 
     def _orb_clicked(self) -> None:
@@ -812,7 +812,8 @@ def run_menubar(app: Sheru) -> None:
             # listening animation style (orb / particles)
             self._orb_items = {}
             style = rumps.MenuItem("✨ Listening style")
-            for key, label in (("orb", "Orb (lightest)"), ("particles", "Particles")):
+            for key, label in (("orb", "Orb (lightest)"), ("particles", "Particles"),
+                               ("rings", "Rings"), ("bars", "Bars")):
                 it = rumps.MenuItem(label, callback=lambda s, k=key: self._set_orb_style(k))
                 it.state = 1 if config.ORB_STYLE == key else 0
                 style.add(it); self._orb_items[key] = it
