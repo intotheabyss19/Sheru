@@ -33,6 +33,18 @@ _REFUSAL = re.compile(
     r"|\b(?:can'?t|cannot|not able to|unable to)\b[^.?!]*\b(?:provide|give|offer)\b[^.?!]*\badvice\b",
     re.I)
 
+# An 'ask_claude' task that's really just an info question -> handle it LOCALLY (web-search + summarize) instead of
+# escalating. Excludes coding/file/action tasks, which genuinely need Claude.
+_INFO_Q = re.compile(r"\b(who|what|when|where|which|whose|how much|how many|how old|how tall|how far|how long|"
+                     r"price|cost|news|score|latest|current|today|population|capital|exchange rate|worth|"
+                     r"define|definition|meaning of|stock|share price)\b", re.I)
+_ACTION_Q = re.compile(r"\b(write|create|make|build|code|script|program|file|folder|directory|open|run|execute|"
+                       r"fix|refactor|install|delete|remove|move|rename|edit|generate|plot|draw|animate|compile)\b", re.I)
+
+
+def _looks_informational(task: str) -> bool:
+    return bool(_INFO_Q.search(task)) and not _ACTION_Q.search(task)
+
 
 @dataclass
 class Result:
@@ -412,14 +424,15 @@ class Router:
         if self.fast is not None and self.llm is not None and (d.get("tool") == "ask_claude" or "say" in d):
             d = self.llm.decide(t, hist, extra_system=mem_ctx)
         if "say" in d:
-            if _REFUSAL.search(d["say"]):                       # it tried to refuse/guess -> escalate, don't speak it
-                return Result("Let me check that for you.", handoff=t, tier=2, followup=True)
+            if _REFUSAL.search(d["say"]):                       # it tried to refuse/guess -> LOCAL search first (falls back to Claude)
+                return Result("Let me check that for you.", search=location.localize(t), tier=1, followup=True)
             return Result(d["say"], followup=True, tier=1)     # history is recorded centrally by the app (all tiers)
         tool, a = d["tool"], d["args"]
         try:
             if tool == "open_app":     r = apps.open_app(a["name"])
             elif tool == "quit_app":   r = apps.quit_app(a["name"])
-            elif tool == "web_search": r = web.search(a["query"])
+            elif tool in ("web_search", "look_up"):             # keep it LOCAL: web-search + on-device summarize
+                return Result("Let me check.", search=location.localize(a.get("query", t)), tier=1, followup=True)
             elif tool == "image_search": r = web.image_search(a["query"])
             elif tool == "open_url":   r = web.open_url(a["url"])
             elif tool == "set_volume": r = system.set_volume(int(a["percent"]))
@@ -436,7 +449,11 @@ class Router:
                 from .actions import contacts_book
                 contacts_book.set_address(a["name"], a["address"])
                 r = f"Got it — I'll address {a['name'].strip().title()} as {a['address'].strip().title()} in messages."
-            elif tool == "ask_claude": return Result("On it.", handoff=a["task"], tier=2)
+            elif tool == "ask_claude":
+                task = a["task"]
+                if _looks_informational(task):                  # an info question dressed as ask_claude -> local search
+                    return Result("Let me check.", search=location.localize(task), tier=1, followup=True)
+                return Result("On it.", handoff=task, tier=2)   # genuine coding/file/multi-step work -> Claude
             else:                      return Result("I'll ask Claude.", handoff=t, tier=2)
         except (KeyError, ValueError, TypeError):
             return Result("I'll ask Claude.", handoff=t, tier=2)
