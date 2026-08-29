@@ -33,11 +33,14 @@ MSGS = ["I'm running late", "the meeting moved to 5", "happy birthday", "call me
 
 def _rows():
     """Yield (utterance, tool, arguments) triples — the labeled seed corpus."""
-    def emit(templates, slots, tool, argfn):
-        cyc = cycle(slots)
-        for t in templates:
-            s = next(cyc)
-            yield t.format(x=s), tool, argfn(s)
+    def emit(templates, slots, tool, argfn, cap=40):
+        n = 0
+        for t in templates:                     # full template x slot cross-product, capped per tool
+            for s in slots:
+                if n >= cap:
+                    return
+                yield t.format(x=s), tool, argfn(s)
+                n += 1
 
     yield from emit(["open {x}", "open up {x}", "launch {x}", "can you open {x}", "start {x}", "fire up {x}"],
                     APPS, "open_app", lambda s: {"name": s.replace("the ", "")})
@@ -68,10 +71,18 @@ def _rows():
     yield from emit(["ask claude to {x}", "can you {x}", "help me {x}"],
                     ["summarize this pdf", "write a python script to rename files", "refactor this function",
                      "explain quantum entanglement"], "ask_claude", lambda s: {"task": s})
-    # hard negatives — spoken answers / chit-chat that must NOT fire a tool
-    for u in ["hello", "hey there", "how are you", "thanks", "thank you", "who are you", "what can you do",
-              "good morning", "tell me a joke", "you're the best", "never mind", "cool"]:
-        yield u, None, None
+    # hard negatives — spoken answers / chit-chat that must NOT fire a tool (with a natural target reply)
+    negatives = {
+        "hello": "Hey! What can I do for you?", "hey there": "Hi! How can I help?",
+        "how are you": "Doing great and ready to help. What do you need?",
+        "thanks": "Anytime!", "thank you": "You're welcome!",
+        "who are you": "I'm Sheru, your assistant. What can I do for you?",
+        "what can you do": "I can open apps, play music, message people, set alarms, search the web, and hand harder things to Claude.",
+        "good morning": "Good morning! What's first today?", "tell me a joke": "Why did the developer go broke? He used up all his cache.",
+        "you're the best": "You're too kind! What's next?", "never mind": "No problem.", "cool": "Glad you like it!",
+    }
+    for u, say in negatives.items():
+        yield u, None, {"say": say}
 
 
 def _from_journal():
