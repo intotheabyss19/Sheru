@@ -17,8 +17,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-SEED = ROOT / "data" / "finetune" / "seed.jsonl"
 OUTDIR = ROOT / "data" / "finetune"
+SEED = OUTDIR / "seed.jsonl"
+LABELED = OUTDIR / "claude_labeled.jsonl"      # distilled from Claude (label_with_claude.py) — higher quality
 
 
 def main():
@@ -27,11 +28,14 @@ def main():
     from sheru.tools import TOOLS
     from sheru.llm_local import SYSTEM
 
-    if not SEED.exists():
-        sys.exit("no seed.jsonl — run scripts/build_dataset.py first")
+    if not SEED.exists() and not LABELED.exists():
+        sys.exit("no data — run scripts/build_dataset.py (and optionally label_with_claude.py) first")
     tok = AutoTokenizer.from_pretrained(config.LOCAL_LLM)
     sysc = SYSTEM + config.reply_directive()
-    rows = [json.loads(l) for l in SEED.read_text().splitlines() if l.strip()]
+    rows = []
+    for src in (SEED, LABELED):                # synthetic seed + Claude-distilled real labels
+        if src.exists():
+            rows += [json.loads(l) for l in src.read_text().splitlines() if l.strip()]
 
     out = []
     for r in rows:
