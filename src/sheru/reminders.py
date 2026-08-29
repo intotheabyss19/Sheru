@@ -27,6 +27,24 @@ def parse_when(text: str):
         return n * mult, f"in {m.group(1)} {unit}{'s' if n != 1 else ''}"
     _H = {"one":1,"two":2,"three":3,"four":4,"five":5,"six":6,"seven":7,"eight":8,"nine":9,
           "ten":10,"eleven":11,"twelve":12,"noon":12,"midnight":0}
+    # spoken compound clock times -> "at H:MM" so the digit parser below handles "eleven fifteen", "seven thirty",
+    # "half past six", "quarter to eight".
+    _MINW = {"o'clock":0,"oclock":0,"fifteen":15,"thirty":30,"forty five":45,"forty-five":45,
+             "twenty five":25,"twenty-five":25,"twenty":20,"ten":10,"five":5,"forty":40}
+    mq = re.search(r"\b(?:at\s+)?(half|quarter)\s+(past|to)\s+(" + "|".join(_H) + r")\b", t)
+    if mq:
+        mins = 30 if mq.group(1) == "half" else 15
+        h = _H[mq.group(3)]
+        if mq.group(2) == "to":
+            h = (h - 1) % 12 or 12
+            mins = 60 - mins
+        t = t.replace(mq.group(0), f"at {h}:{mins:02d}")
+    else:
+        mc = re.search(r"\b(?:at\s+)?(" + "|".join(_H) + r")\s+(o'?\s*clock|fifteen|thirty|forty[\s-]?five|"
+                       r"twenty[\s-]?five|twenty|ten|five|forty)\b", t)
+        if mc:
+            mn = 0 if "clock" in mc.group(2) else _MINW.get(mc.group(2).replace("-", " "), 0)
+            t = t.replace(mc.group(0), f"at {_H[mc.group(1)]}:{mn:02d}")
     mw = re.search(r"\bat\s+(" + "|".join(_H) + r")\s*(a\.?m\.?|p\.?m\.?)?\b", t)
     if mw:
         t = t.replace(mw.group(0), f"at {_H[mw.group(1)]}{' '+mw.group(2) if mw.group(2) else ''}", 1)
