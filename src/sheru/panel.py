@@ -11,7 +11,7 @@ from typing import Callable
 
 import objc
 from AppKit import (
-    NSPanel, NSTextField, NSTextView, NSScrollView, NSBox, NSColor, NSFont, NSApp, NSButton,
+    NSPanel, NSTextField, NSTextView, NSScrollView, NSBox, NSColor, NSFont, NSApp, NSButton, NSView,
     NSVisualEffectView, NSAttributedString, NSFontAttributeName, NSForegroundColorAttributeName,
     NSWindowStyleMaskBorderless, NSWindowStyleMaskNonactivatingPanel,
     NSFloatingWindowLevel, NSWindowCollectionBehaviorCanJoinAllSpaces,
@@ -51,6 +51,9 @@ class TypePanel(NSObject):
         self._panel = None
         self._history_provider = None      # () -> [(utterance, reply), ...] newest-first
         self._live = False                 # True while showing a live reply (so recent view doesn't clobber it)
+        self._card = None                  # Siri-style message card (NSView) while confirming a message
+        self._on_send = None
+        self._on_cancel = None
         return self
 
     @objc.python_method
@@ -170,6 +173,7 @@ class TypePanel(NSObject):
         if self._panel is None:
             self._build()
         self._live = False
+        self._clear_card()
         self._field.setStringValue_("")
         self._render_recent()
         NSApp.activateIgnoringOtherApps_(True)
@@ -186,6 +190,82 @@ class TypePanel(NSObject):
         self.hide()
 
     @objc.python_method
+    def is_visible(self):
+        return self._panel is not None and self._panel.isVisible()
+
+    # ---- Siri-style message card (recipient + bubble + Send/Cancel) ------------------
+    @objc.python_method
+    def show_message_card(self, recipient, text, on_send, on_cancel):
+        def do():
+            if self._panel is None:
+                return
+            self._live = True
+            self._clear_card()
+            self._on_send, self._on_cancel = on_send, on_cancel
+            top = H - PAD - INPUT_H - 24
+            bottom = PAD + 6
+            ch = top - bottom
+            cw = W - 2 * PAD
+            card = NSView.alloc().initWithFrame_(NSMakeRect(PAD, bottom, cw, ch))
+            card.setWantsLayer_(True)
+
+            to = NSTextField.alloc().initWithFrame_(NSMakeRect(4, ch - 26, cw - 8, 20))
+            to.setBezeled_(False); to.setDrawsBackground_(False); to.setEditable_(False); to.setSelectable_(False)
+            to.setFont_(NSFont.systemFontOfSize_(13)); to.setTextColor_(NSColor.secondaryLabelColor())
+            to.setStringValue_("To  " + (recipient or ""))
+            card.addSubview_(to)
+
+            bh = ch - 26 - 8 - 46
+            bubble = NSView.alloc().initWithFrame_(NSMakeRect(0, 48, cw, bh))
+            bubble.setWantsLayer_(True)
+            bubble.layer().setCornerRadius_(14.0)
+            bubble.layer().setBackgroundColor_(NSColor.systemBlueColor().colorWithAlphaComponent_(0.90).CGColor())
+            msg = NSTextField.alloc().initWithFrame_(NSMakeRect(14, 8, cw - 28, bh - 16))
+            msg.setBezeled_(False); msg.setDrawsBackground_(False); msg.setEditable_(False); msg.setSelectable_(True)
+            msg.setFont_(NSFont.systemFontOfSize_(17)); msg.setTextColor_(NSColor.whiteColor())
+            msg.setUsesSingleLineMode_(False); msg.cell().setWraps_(True); msg.cell().setLineBreakMode_(0)
+            msg.setStringValue_(text or "")
+            bubble.addSubview_(msg)
+            card.addSubview_(bubble)
+
+            send = NSButton.alloc().initWithFrame_(NSMakeRect(cw - 104, 6, 104, 32))
+            send.setTitle_("Send"); send.setBezelStyle_(1); send.setKeyEquivalent_("\r")
+            send.setTarget_(self); send.setAction_("cardSend:")
+            card.addSubview_(send)
+            cancel = NSButton.alloc().initWithFrame_(NSMakeRect(cw - 104 - 96, 6, 92, 32))
+            cancel.setTitle_("Cancel"); cancel.setBezelStyle_(1)
+            cancel.setTarget_(self); cancel.setAction_("cardCancel:")
+            card.addSubview_(cancel)
+
+            sv = self._out.enclosingScrollView()
+            if sv is not None:
+                sv.setHidden_(True)
+            self._panel.contentView().addSubview_(card)
+            self._card = card
+        AppHelper.callAfter(do)
+
+    @objc.python_method
+    def _clear_card(self):
+        if getattr(self, "_card", None) is not None:
+            self._card.removeFromSuperview()
+            self._card = None
+        sv = self._out.enclosingScrollView() if getattr(self, "_out", None) is not None else None
+        if sv is not None:
+            sv.setHidden_(False)
+
+    def cardSend_(self, sender):
+        cb = self._on_send
+        self._clear_card()
+        if cb:
+            cb()
+
+    def cardCancel_(self, sender):
+        cb = self._on_cancel
+        self._clear_card()
+        if cb:
+            cb()
+
+    @objc.python_method
     def set_status(self, text: str):
         def do():
             if getattr(self, "_status", None) is not None:
@@ -196,6 +276,7 @@ class TypePanel(NSObject):
     def _set_out(self, text: str):
         def do():
             self._live = True
+            self._clear_card()
             self._out.setString_(text)
             self._out.scrollRangeToVisible_((len(self._out.string()), 0))
         AppHelper.callAfter(do)

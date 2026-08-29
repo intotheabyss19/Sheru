@@ -191,9 +191,8 @@ class Sheru:
                         "ts": time.time(), "sink": sink}
         self._save_pending()
         who = contact["name"] if contact else recipient
-        msg = f"Here's the message to {who}: “{draft}”. Want me to send it, or change anything?"
-        sink(msg)
-        return msg
+        self._present_draft(who, draft, sink)
+        return draft
 
     def _handle_pending(self, text: str, sink) -> str:
         p = self.pending
@@ -211,7 +210,8 @@ class Sheru:
         p["draft"] = compose.draft(self.llm, p["recipient"], p["gist"], revision=text, previous=p["draft"])
         p["ts"] = time.time()
         self._save_pending()
-        sink(f"How about: “{p['draft']}”. Send it?")
+        who = (p.get("contact") or {}).get("name") or p["recipient"]
+        self._present_draft(who, p["draft"], sink)
         return p["draft"]
 
     def _handle_number(self, text: str, sink) -> str:
@@ -371,6 +371,21 @@ class Sheru:
         if pend is not None:
             pairs.append((pend, ""))
         return list(reversed(pairs))[:n]
+
+    def _present_draft(self, who: str, draft: str, sink) -> None:
+        """Show a message draft as a Siri-style card in the panel (typed mode), else speak/append the prompt."""
+        if (self.panel is not None and not self._is_voice_sink(sink)
+                and getattr(self.panel, "is_visible", None) and self.panel.is_visible()):
+            self.panel.show_message_card(
+                who, draft,
+                on_send=lambda: self._panel_pending("send it"),
+                on_cancel=lambda: self._panel_pending("cancel"))
+        else:
+            sink(f"Here's the message to {who}: “{draft}”. Want me to send it, or change anything?")
+
+    def _panel_pending(self, word: str) -> None:
+        """Run a confirm/cancel word through the pending state machine off the UI thread (send can block)."""
+        threading.Thread(target=lambda: self.handle_text(word, sink=self.panel._append), daemon=True).start()
 
     def allow_followup(self, seconds: float = 6.0) -> None:
         self.followup_until = time.monotonic() + seconds
