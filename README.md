@@ -3,6 +3,17 @@
 Wake word **"Hey Sheru"** (say *Sheroo*). Speaks back in a young male voice.
 Tiered brain: instant grammar → local Qwen3-8B → Claude Code (your subscription) with a local fallback.
 
+## Platform requirements (read first)
+
+Sheru is built for **macOS on Apple Silicon (M-series)**. It is **not** cross-platform:
+
+- **GUI** (Spotlight-style panel, menu-bar app) uses **pyobjc / AppKit / rumps** — macOS only.
+- **Local models** (LLM, speech-to-text, text-to-speech) run on **Apple MLX** — Apple Silicon only.
+- **Actions** (open apps, control Spotify/WhatsApp, terminal, screen OCR, spoken replies) use **AppleScript,
+  `open`, Apple Vision, AVSpeech** — macOS only.
+
+On **Windows or Linux it will not run as-is** — see [Running on Windows](#running-on-windows-satya-) below.
+
 ## Run
 
 ```bash
@@ -72,3 +83,24 @@ whisper. Sheru never goes mute or deaf because the network did.
 
 **Better voice:** System Settings → Accessibility → Spoken Content → System Voice → Manage Voices →
 download an **Enhanced** male voice (e.g. *Aaron*, *Rishi*), then `export SHERU_VOICE="Aaron (Enhanced)"`.
+
+## Running on Windows (Satya 👋)
+
+Straight up: most of Sheru is macOS-specific, so this repo is a **reference architecture to port**, not a
+drop-in install for Windows. What each layer needs:
+
+| Layer | Sheru (macOS) | Windows equivalent to build |
+|---|---|---|
+| Local LLM / STT / TTS | Apple MLX (`mlx-lm`, `mlx-whisper`, Kokoro) | **Ollama** or `llama.cpp` for the LLM; `faster-whisper` for STT; Piper / Edge-TTS for voice |
+| GUI panel + menu bar | pyobjc / AppKit / rumps | **PySide6 / Qt** or Tkinter panel; `pystray` for the tray icon |
+| Open / quit apps, terminal | `open -a`, Ghostty, AppleScript | `os.startfile` / `subprocess`, Windows Terminal |
+| Music / messaging control | Spotify + WhatsApp AppleScript | Spotify Web API; WhatsApp Web via Playwright |
+| Screen read | Apple Vision OCR | `pytesseract` / Windows.Media.Ocr |
+| Escalate to Claude | `claude -p` CLI | **works as-is** if the Claude Code CLI is installed |
+
+**Ports cleanly with no changes:** the tiered **router grammar** (`router.py`), the **tool schema** (`tools.py`),
+the **Claude Code handoff** (`claude_code.py`), and the overall architecture — that's the valuable core. The
+platform layer (`actions/`, `panel.py`, `tts.py`, `stt.py`, `audio.py`) is what you'd re-implement for Windows.
+
+Suggested path: rename it to your own assistant, keep `router.py` + `tools.py` + `claude_code.py`, and rebuild
+the `actions/` + GUI + model layers for Windows. Ping Yash and we'll merge learnings later.
