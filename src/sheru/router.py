@@ -25,6 +25,14 @@ def _num(s: str) -> float:
     return float(s) if re.fullmatch(r"\d+(\.\d+)?", s) else NUM.get(s, 1)
 
 
+# The local model sometimes REFUSES ("I can't browse the internet") and then guesses, instead of escalating.
+# Catch that shape in its spoken reply and hand off to Claude (which can actually browse) rather than speak it.
+_REFUSAL = re.compile(
+    r"\b(?:can'?t|cannot|unable to|not able to|don'?t have)\b[^.?!]*"
+    r"\b(?:browse|access|internet|web|real[\s-]?time|current|live|up[\s-]?to[\s-]?date|latest|search|look\s?up)\b",
+    re.I)
+
+
 @dataclass
 class Result:
     speech: str = ""              # what to say now
@@ -392,6 +400,8 @@ class Router:
         if self.fast is not None and self.llm is not None and (d.get("tool") == "ask_claude" or "say" in d):
             d = self.llm.decide(t, hist, extra_system=mem_ctx)
         if "say" in d:
+            if _REFUSAL.search(d["say"]):                       # it tried to refuse/guess -> escalate, don't speak it
+                return Result("Let me check that for you.", handoff=t, tier=2, followup=True)
             return Result(d["say"], followup=True, tier=1)     # history is recorded centrally by the app (all tiers)
         tool, a = d["tool"], d["args"]
         try:
