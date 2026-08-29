@@ -21,7 +21,9 @@ def set_search_engine(name: str) -> str:
 
 
 def _open(url: str) -> None:
-    subprocess.run(["open", "-g", "-a", config.BROWSER_APP, url], check=False)   # -g: open in background, don't steal focus from the user's current app
+    # -g keeps a search in the background (silent, Siri-like); no `-a` so it opens in the user's DEFAULT browser
+    # (macOS default handler — Zen/Safari/whatever they set), not a hardcoded one.
+    subprocess.run(["open", "-g", url], check=False)
     _state["last_url"] = url
 
 
