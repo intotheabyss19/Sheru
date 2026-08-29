@@ -716,6 +716,9 @@ def main(argv=None) -> int:
     if a.command == "import-contacts":
         from .google_contacts import import_all
         return import_all()
+    if a.command == "import-vcf":
+        from .contacts_vcf import import_vcf
+        return import_vcf(a.text)
     if a.command == "trigger":
         import socket
         from . import config

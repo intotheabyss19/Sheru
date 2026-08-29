@@ -80,8 +80,9 @@ class Transcriber:
             # anti-hallucination settings: single greedy temp, don't feed prior text (stops runaway loops),
             # bias vocabulary toward Hinglish. no_speech/logprob thresholds suppress transcribing silence.
             opts = dict(path_or_hf_repo=repo, temperature=0.0, condition_on_previous_text=False,
-                        no_speech_threshold=0.6, logprob_threshold=-1.0,
-                        initial_prompt="A conversation mixing Hindi and English (Hinglish).")
+                        no_speech_threshold=0.6, logprob_threshold=-1.0, task="transcribe",   # transcribe, never translate
+                        initial_prompt="यह हिंदी और अंग्रेज़ी में बातचीत है। A conversation in Hindi and English "
+                                       "(Hinglish); keep Hindi words in Devanagari, do not translate.")
             def _do():
                 if forced:
                     return mlx_whisper.transcribe(audio, language=forced, **opts).get("text", "")
