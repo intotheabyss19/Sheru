@@ -110,8 +110,8 @@ class Sheru:
                 res.followup = True
         if res.speech:
             sink(res.speech)
-        if res.followup and self._is_voice_sink(sink):
-            self.allow_followup()
+        if self._is_voice_sink(sink) and res.speech and getattr(res, "tool", None) != "stop":
+            self.allow_followup(12 if res.followup else 8)   # keep the mic open for a natural follow-up after ANY spoken reply
         self._record_turn(text, res.speech)
         return res.speech
 
@@ -278,21 +278,37 @@ class Sheru:
 
     def activate(self) -> None:
         """Push-to-talk trigger (F5 or mic button): show the panel and listen for one command."""
-        if getattr(self, "_listening", False):
-            return                       # already capturing — ignore the re-press
+        t = getattr(self, "_ptt_thread", None)
+        if getattr(self, "_listening", False) and t is not None and t.is_alive():
+            return                       # genuinely still capturing — ignore the re-press
+        self._listening = False          # clear a stale flag from a thread that already died (fixes "shows listening but won't")
         log.info("ACTIVATED — listening for a command")
         self._ensure_mic_level()
         self.show_type_panel()
         if self.panel is not None:
-            self.panel._set_out("Listening…")
-            self.panel.set_status("🎙 listening…")
-        threading.Thread(target=self._listen_and_handle, name="sheru-ptt", daemon=True).start()
+            if getattr(self, "_warm", False):
+                self.panel._set_out("Listening…")
+                self.panel.set_status("🎙 listening…")
+            else:
+                self.panel._set_out("⏳ Warming up models… one moment.")
+                self.panel.set_status("⏳ warming up…")
+        self._ptt_thread = threading.Thread(target=self._listen_and_handle, name="sheru-ptt", daemon=True)
+        self._ptt_thread.start()
 
     def _listen_and_handle(self) -> None:
         from .audio import capture_once
         if not getattr(self, "_warm", False):
-            self._say_both("One moment, still starting up.")
-            return
+            if self.panel is not None:
+                self.panel._set_out("⏳ Warming up models… one moment.")
+                self.panel.set_status("⏳ warming up…")
+            t_warm = time.monotonic() + 15
+            while not getattr(self, "_warm", False) and time.monotonic() < t_warm:
+                time.sleep(0.2)
+            if not getattr(self, "_warm", False):
+                self._say_both("Still starting up — give me a few seconds and try again.")
+                if self.panel is not None:
+                    self.panel.set_status("")
+                return
         self._listening = True
         try:
             first = True
@@ -328,6 +344,8 @@ class Sheru:
                 first = False
         finally:
             self._listening = False
+            if self.panel is not None:                      # never leave a stale "listening…" showing
+                self.panel.set_status("")
 
     def _start_progress(self, label: str) -> None:
         """Show a live '<label> · Ns' stopwatch in the panel (e.g. '☁️ Claude · 8s')."""

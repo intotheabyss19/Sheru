@@ -7,6 +7,8 @@ RECENT history + actions instead of a blank box. Escape also hides it.
 """
 from __future__ import annotations
 
+import threading
+import time
 from typing import Callable
 
 import objc
@@ -60,6 +62,9 @@ class TypePanel(NSObject):
         self._on_send = None
         self._on_cancel = None
         self._click_mon = None             # global click-away monitor (true dismiss, no resignKey false-positives)
+        self._quick = None                 # quick-actions row (NSView)
+        self._sw_timer = None              # reply stopwatch NSTimer
+        self._sw_t0 = None
         return self
 
     @objc.python_method
@@ -121,11 +126,15 @@ class TypePanel(NSObject):
         vev.addSubview_(sep)
 
         # output — transparent scrollable text (recent history when idle, the reply when live)
-        scroll = NSScrollView.alloc().initWithFrame_(NSMakeRect(PAD, PAD + 14, W - 2 * PAD, H - 2 * PAD - INPUT_H - 34))
+        sep_y = H - PAD - INPUT_H - 10
+        quick_y, quick_h = 26, 26
+        scroll_y = quick_y + quick_h + 4
+        scroll_h = sep_y - scroll_y - 6
+        scroll = NSScrollView.alloc().initWithFrame_(NSMakeRect(PAD, scroll_y, W - 2 * PAD, scroll_h))
         scroll.setHasVerticalScroller_(True)
         scroll.setAutohidesScrollers_(True)
         scroll.setDrawsBackground_(False)
-        tv = NSTextView.alloc().initWithFrame_(NSMakeRect(0, 0, W - 2 * PAD, H - 2 * PAD - INPUT_H - 20))
+        tv = NSTextView.alloc().initWithFrame_(NSMakeRect(0, 0, W - 2 * PAD, scroll_h))
         tv.setEditable_(False)
         tv.setDrawsBackground_(False)
         tv.setFont_(NSFont.systemFontOfSize_(16))
@@ -134,6 +143,22 @@ class TypePanel(NSObject):
         scroll.setDocumentView_(tv)
         vev.addSubview_(scroll)
         self._out = tv
+
+        # quick-actions row — one-tap shortcuts for the most common commands
+        quick = NSView.alloc().initWithFrame_(NSMakeRect(PAD, quick_y, W - 2 * PAD, quick_h))
+        bx = 0
+        for title, cmd in (("🌤 Weather", "what's the weather"), ("⏸ Pause", "pause"),
+                           ("⏭ Next", "next"), ("⏱ 10 min", "set a timer for 10 minutes"),
+                           ("📰 News", "what's the news")):
+            bw = 118
+            b = NSButton.alloc().initWithFrame_(NSMakeRect(bx, 0, bw, quick_h))
+            b.setTitle_(title); b.setBezelStyle_(1); b.setFont_(NSFont.systemFontOfSize_(12))
+            b.setToolTip_(cmd)                 # carries the command string for quickTap_
+            b.setTarget_(self); b.setAction_("quickTap:")
+            quick.addSubview_(b)
+            bx += bw + 6
+        vev.addSubview_(quick)
+        self._quick = quick
 
         # status line (local vs Claude + stopwatch)
         st = NSTextField.alloc().initWithFrame_(NSMakeRect(PAD, 6, W - 2 * PAD, 16))
@@ -171,8 +196,16 @@ class TypePanel(NSObject):
         ts.beginEditing()
         ts.setAttributedString_(NSAttributedString.alloc().initWithString_(""))
         if not self._chat:
-            ts.appendAttributedString_(self._attr("Type a command, or tap the mic and speak.",
+            ts.appendAttributedString_(self._attr("Type a command, or tap the mic and speak.\n\n",
                                                   NSColor.secondaryLabelColor(), 15))
+            ts.appendAttributedString_(self._attr("Try (one clear sentence works best):\n",
+                                                  NSColor.tertiaryLabelColor(), 12))
+            for ex in ("“message Piyush on WhatsApp that I'm running late”",
+                       "“play Dandelions”     “what's the weather”",
+                       "“set an alarm for quarter past seven”",
+                       "“ask Claude to summarize this PDF”"):
+                ts.appendAttributedString_(self._attr("   " + ex + "\n",
+                                                      NSColor.secondaryLabelColor(), 13))
         for turn in self._chat:
             you = turn["role"] == "you"
             ts.appendAttributedString_(self._attr(("You   " if you else "Sheru   "),
@@ -194,6 +227,7 @@ class TypePanel(NSObject):
             if len(self._chat) > 40:
                 del self._chat[: len(self._chat) - 40]
             self._render_chat()
+            self._sw_start()          # start the reply stopwatch (shows "⏳ Ns" until the reply lands)
         AppHelper.callAfter(do)
 
     @objc.python_method
@@ -283,6 +317,8 @@ class TypePanel(NSObject):
             sv = self._out.enclosingScrollView()
             if sv is not None:
                 sv.setHidden_(True)
+            if self._quick is not None:
+                self._quick.setHidden_(True)         # don't let shortcut chips peek through the message card
             self._panel.contentView().addSubview_(card)
             self._card = card
         AppHelper.callAfter(do)
@@ -295,6 +331,8 @@ class TypePanel(NSObject):
         sv = self._out.enclosingScrollView() if getattr(self, "_out", None) is not None else None
         if sv is not None:
             sv.setHidden_(False)
+        if getattr(self, "_quick", None) is not None:
+            self._quick.setHidden_(False)
 
     def cardSend_(self, sender):
         cb = self._on_send
@@ -319,6 +357,7 @@ class TypePanel(NSObject):
     def _set_out(self, text: str):
         def do():
             self._live = True
+            self._sw_stop()
             self._clear_card()
             self._out.setString_(text)
             self._out.scrollRangeToVisible_((len(self._out.string()), 0))
@@ -328,6 +367,7 @@ class TypePanel(NSObject):
     def _append(self, text: str):
         def do():
             self._live = True
+            self._sw_stop()
             self._clear_card()
             if self._chat and self._chat[-1]["role"] == "sheru":
                 t = self._chat[-1]
@@ -340,6 +380,44 @@ class TypePanel(NSObject):
             self._render_chat()
         AppHelper.callAfter(do)
 
+    # ---- reply stopwatch (an at-a-glance "how long is this taking") ------------------
+    @objc.python_method
+    def _sw_start(self):
+        if not self.is_visible():
+            return
+        from Foundation import NSTimer
+        self._sw_stop()
+        self._sw_t0 = time.monotonic()
+        self._sw_timer = NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
+            0.2, self, "swTick:", None, True)
+
+    def swTick_(self, timer):
+        if self._sw_t0 is None or not self.is_visible():
+            self._sw_stop(); return
+        if getattr(self, "_status", None) is not None:
+            self._status.setStringValue_("⏳ %.1fs" % (time.monotonic() - self._sw_t0))
+
+    @objc.python_method
+    def _sw_stop(self):
+        if self._sw_timer is not None:
+            self._sw_timer.invalidate(); self._sw_timer = None
+        self._sw_t0 = None
+        # only clear OUR stopwatch text — never stomp the app's "☁️ Claude · Ns" progress line
+        if getattr(self, "_status", None) is not None and self._status.stringValue().startswith("⏳"):
+            self._status.setStringValue_("")
+
+    # ---- submit (Enter or a quick-action chip) --------------------------------------
+    @objc.python_method
+    def _submit(self, text: str):
+        """Show the utterance, then route it OFF the main thread so the UI stays live during Claude calls."""
+        self.push_user(text)
+        threading.Thread(target=lambda: self._on_submit(text, self._append), daemon=True).start()
+
+    def quickTap_(self, sender):
+        cmd = sender.toolTip()
+        if cmd:
+            self._submit(cmd)
+
     def micPressed_(self, sender):
         if self._on_mic is not None:
             self._on_mic()
@@ -350,8 +428,7 @@ class TypePanel(NSObject):
             text = self._field.stringValue().strip()
             if text:
                 self._field.setStringValue_("")
-                self.push_user(text)
-                self._on_submit(text, self._append)
+                self._submit(text)
             return True
         if selector == "cancelOperation:":
             self.hide()
