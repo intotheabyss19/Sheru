@@ -1,7 +1,7 @@
 """Real browser ACTIONS (not just opening a URL) — Lane A.
 
-YouTube / YouTube-Music: resolve the first search result's video id and open the watch URL in the chosen
-browser+profile (browser.py), so it autoplays and keeps playing in a normal tab (no login needed).
+YouTube / YouTube-Music: resolve the first search result's video id and open the watch URL in the user's
+DEFAULT browser (`open <url>`), then press 'k' so it actually plays (autoplay is gesture-gated). No login needed.
 Gmail / LinkedIn: driven with Playwright on the real logged-in Brave profile (needs Brave closed + a one-time
 login; send actions go through Sheru's confirm flow). Those are logged-in + TOS-sensitive, so they never
 auto-send without a spoken/typed "yes".
@@ -12,18 +12,12 @@ import re
 import subprocess
 import urllib.parse
 
-from . import browser
-
 
 def _press_play_soon(delay: float = 4.0) -> None:
-    """Best-effort: after the watch page loads, bring the browser front and press 'k' (YouTube's play/pause) so
-    the video actually STARTS — Chromium blocks silent autoplay until a user gesture. Needs Accessibility for
-    System Events; if that's not granted it fails quietly and the tab is still open, just paused."""
-    app = browser.current().get("browser", "Brave Browser")
-    script = (f'delay {delay}\n'
-              f'tell application "{app}" to activate\n'
-              f'delay 0.6\n'
-              f'tell application "System Events" to keystroke "k"')
+    """Best-effort: after the watch page loads, press 'k' (YouTube's play) so the video actually STARTS —
+    Chromium/Firefox block silent autoplay until a gesture. `open <url>` already foregrounds the DEFAULT browser,
+    so we send the key to the frontmost app. Needs Accessibility; fails quietly (tab still opens, just paused)."""
+    script = f'delay {delay}\ntell application "System Events" to keystroke "k"'
     try:
         subprocess.Popen(["osascript", "-e", script],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -50,16 +44,18 @@ def _first_youtube_id(query: str, music: bool = False) -> str | None:
 def play_youtube(query: str) -> str:
     vid = _first_youtube_id(query)
     if vid:
-        browser.launch(f"https://www.youtube.com/watch?v={vid}")
-        return f"Playing {query} on YouTube in {browser.describe()}."
-    browser.launch("https://www.youtube.com/results?search_query=" + urllib.parse.quote(query))
-    return f"I couldn't resolve the video, so I opened YouTube search for {query}."
+        subprocess.run(["open", f"https://www.youtube.com/watch?v={vid}"], check=False)   # default browser
+        _press_play_soon()
+        return f"Playing {query} on YouTube."
+    subprocess.run(["open", "https://www.youtube.com/results?search_query=" + urllib.parse.quote(query)], check=False)
+    return f"I couldn't find the exact video, so I opened a YouTube search for {query}."
 
 
 def play_music(query: str) -> str:
     vid = _first_youtube_id(query, music=True)
     if vid:
-        browser.launch(f"https://music.youtube.com/watch?v={vid}")
+        subprocess.run(["open", f"https://music.youtube.com/watch?v={vid}"], check=False)   # default browser
+        _press_play_soon()
         return f"Playing {query} on YouTube Music."
-    browser.launch("https://music.youtube.com/search?q=" + urllib.parse.quote(query))
+    subprocess.run(["open", "https://music.youtube.com/search?q=" + urllib.parse.quote(query)], check=False)
     return f"I opened YouTube Music search for {query}."
