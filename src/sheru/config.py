@@ -42,8 +42,10 @@ SAMPLE_RATE = 16_000
 WAKE_WORDS = ("hey sheru", "sheru")
 LOCAL_LLM = os.environ.get("SHERU_LLM") or _P.get("llm_model") or "mlx-community/Qwen3-4B-4bit"   # resident tier. 4B routes as well as 8B (verified) and is snappier; set profile 'llm_model' or SHERU_LLM=mlx-community/Qwen3-8B-4bit for warmer chit-chat
 LOCAL_LLM_FAST = os.environ.get("SHERU_LLM_FAST") or None                       # optional light tier; set to e.g. mlx-community/Qwen3-4B-4bit
-# STT backend: "parakeet" (fast, English/European only) or "whisper" (Hindi + English + Hinglish, slower). Real
-# Hindi NEEDS whisper — parakeet mangles it into garbage. Set profile 'stt_backend' or SHERU_STT=whisper.
+# STT backend: "parakeet" (fast, English/European only), "whisper" (Hindi + English + Hinglish, slower, local),
+# or "sarvam" (Saaras v3 in the cloud — best Hindi/Hinglish by a wide margin, needs network + an API key).
+# Real Hindi NEEDS whisper or sarvam — parakeet mangles it into garbage.
+# Set profile 'stt_backend' or SHERU_STT=sarvam.
 STT_BACKEND = os.environ.get("SHERU_STT") or _P.get("stt_backend") or "parakeet"
 # Force Whisper to a language ("en"/"hi") instead of auto-detect; None = auto-detect but CLAMPED to en/hi
 # (Parakeet-v3 and Whisper both hallucinate Russian/other Cyrillic on Hindi speech or noise — the clamp kills that).
@@ -96,3 +98,46 @@ TTS_BACKEND = os.environ.get("SHERU_TTS") or _P.get("tts_backend") or "avspeech"
 KOKORO_MODEL = os.environ.get("SHERU_KOKORO", "mlx-community/Kokoro-82M-bf16")
 KOKORO_VOICE = os.environ.get("SHERU_KOKORO_VOICE") or _P.get("kokoro_voice") or "am_michael"   # male US; Hindi: hm_omega / hf_alpha
 KOKORO_SPEED = float(os.environ.get("SHERU_KOKORO_SPEED", "1.0"))
+
+# Sarvam (cloud) TTS: Bulbul v3 — real Indian-language voices, 11 languages. Needs network + a key from
+# dashboard.sarvam.ai. Set SHERU_TTS=sarvam. Put the key in data/profile.json as 'sarvam_api_key': the
+# menu-bar / login-item launch does NOT inherit your shell env, so SARVAM_API_KEY only works from a terminal.
+# Any failure (offline, bad key, 429, text too long) falls back to AVSpeech, so Sheru never goes mute.
+SARVAM_API_KEY = os.environ.get("SARVAM_API_KEY") or _P.get("sarvam_api_key") or None
+SARVAM_VOICE = os.environ.get("SHERU_SARVAM_VOICE") or _P.get("sarvam_voice") or "shubh"   # young male. female: ishita
+SARVAM_LANG = os.environ.get("SHERU_SARVAM_LANG") or _P.get("sarvam_lang") or "auto"       # "auto" | hi-IN | en-IN | ...
+SARVAM_PACE = float(os.environ.get("SHERU_SARVAM_PACE", "1.0"))       # 0.5-2.0 on bulbul:v3
+SARVAM_TIMEOUT = float(os.environ.get("SHERU_SARVAM_TIMEOUT", "8"))   # give up and use AVSpeech after this
+SARVAM_MAX_CHARS = 2500                                               # bulbul:v3 hard cap on one request
+SARVAM_STT_MODEL = os.environ.get("SHERU_SARVAM_STT") or "saaras:v3"
+SARVAM_STT_MAX_SECONDS = 30.0    # sync REST cap; longer clips go to the local backend instead of erroring
+# Local backend used when the Saaras call can't happen (offline / no key / clip too long). whisper, not
+# parakeet: the whole point of running sarvam is Hindi, and parakeet cannot do Hindi at all.
+SARVAM_STT_FALLBACK = os.environ.get("SHERU_SARVAM_STT_FALLBACK") or _P.get("sarvam_stt_fallback") or "whisper"
+
+
+# What language Sheru answers in. "auto" mirrors whatever the user spoke, "hi" pins Hindi, "en" is the old
+# English-only behaviour. A Hindi VOICE does not make Hindi REPLIES — the model has to be told.
+REPLY_LANG = os.environ.get("SHERU_REPLY_LANG") or _P.get("reply_lang") or "auto"
+
+_REPLY_DIRECTIVE = {
+    "auto": " Reply in the same language the user spoke. If they spoke Hindi or Hinglish, reply in Hindi using"
+            " Devanagari script.",
+    "hi": " Always reply in Hindi, using Devanagari script, however the user phrased the question.",
+    "en": " Reply in English.",
+}
+
+
+def reply_directive() -> str:
+    """Appended to every system prompt (local model and Claude Code) so the reply language matches the voice."""
+    return _REPLY_DIRECTIVE.get(REPLY_LANG, _REPLY_DIRECTIVE["auto"])
+
+
+def sarvam_lang_for(text: str) -> str:
+    """Bulbul needs an explicit language_code — it has no auto-detect. "auto" means: Devanagari in the reply
+    -> hi-IN, otherwise en-IN (Indian-accented English), so a Hinglish assistant doesn't read plain English
+    through a Hindi language model."""
+    if SARVAM_LANG != "auto":
+        return SARVAM_LANG
+    return "hi-IN" if any("\u0900" <= c <= "\u097f" for c in text) else "en-IN"
+

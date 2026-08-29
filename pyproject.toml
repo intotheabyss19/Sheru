@@ -24,7 +24,9 @@ dependencies = [
     "pyobjc-framework-vision>=12.2.2",
     "rapidfuzz>=3.14.5",
     "rumps>=0.4.0",
+    "sarvamai>=0.1.31",
     "sherpa-onnx==1.13.5",
+    "sherpa-onnx-core==1.13.5",   # ships libonnxruntime.dylib; sherpa-onnx does not depend on it explicitly
     "sounddevice>=0.5.6",
 ]
 
