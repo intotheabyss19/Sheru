@@ -39,7 +39,7 @@ class ClaudeSession:
                 "--append-system-prompt", ("You are speaking to the user through a voice assistant named Sheru. Keep every reply "
                                            "under four short sentences of plain, natural spoken words; no markdown, no lists, no code "
                                            "unless asked to write a file. Do NOT narrate your tools, steps, or process — just give the answer directly."
-                                           + config.reply_directive())]
+                                           + config.reply_directive(task))]
         if resume and self.session_id:
             args += ["--resume", self.session_id]
         args += extra_args or []

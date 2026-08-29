@@ -120,18 +120,17 @@ SARVAM_STT_FALLBACK = os.environ.get("SHERU_SARVAM_STT_FALLBACK") or _P.get("sar
 # English-only behaviour. A Hindi VOICE does not make Hindi REPLIES — the model has to be told.
 REPLY_LANG = os.environ.get("SHERU_REPLY_LANG") or _P.get("reply_lang") or "auto"
 
-_REPLY_DIRECTIVE = {
-    "auto": " Match the user's language exactly: if they wrote mainly in English / Latin script, reply in English"
-            " (even if it contains a few Hindi names or song titles); reply in Hindi using Devanagari script ONLY"
-            " when they actually spoke Hindi.",
-    "hi": " Always reply in Hindi, using Devanagari script, however the user phrased the question.",
-    "en": " Reply in English.",
-}
-
-
-def reply_directive() -> str:
-    """Appended to every system prompt (local model and Claude Code) so the reply language matches the voice."""
-    return _REPLY_DIRECTIVE.get(REPLY_LANG, _REPLY_DIRECTIVE["auto"])
+def reply_directive(text: str = "") -> str:
+    """Appended to every system prompt so the reply language matches what the user spoke. In 'auto' mode we PIN
+    the language by the INPUT'S SCRIPT here in code (deterministic) rather than asking the small local model to
+    evaluate 'reply in their language' — which it fails, answering English questions in Hindi."""
+    if REPLY_LANG == "hi":
+        return " Always reply in Hindi, using Devanagari script, however the user phrased the question."
+    if REPLY_LANG == "en":
+        return " Reply in English."
+    if text and any("ऀ" <= c <= "ॿ" for c in text):     # the user's message contains Devanagari
+        return " The user spoke Hindi — reply in Hindi using Devanagari script."
+    return " The user spoke English — reply ONLY in English. Do not use Hindi or Devanagari."
 
 
 def set_tts(backend: str) -> None:

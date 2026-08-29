@@ -45,7 +45,7 @@ class LocalLLM:
         """-> {"tool": name, "args": {...}} or {"say": text}."""
         from mlx_lm import generate
         self.load()
-        sysc = SYSTEM + config.reply_directive() + ("\n\n" + extra_system if extra_system else "")
+        sysc = SYSTEM + config.reply_directive(text) + ("\n\n" + extra_system if extra_system else "")
         msgs = [{"role": "system", "content": sysc}, *(history or []), {"role": "user", "content": text}]
         prompt = self._tok.apply_chat_template(msgs, tools=TOOLS, add_generation_prompt=True, enable_thinking=False)
         t0 = time.perf_counter()
@@ -69,7 +69,7 @@ class LocalLLM:
         self.load()
         sys_p = ("You are Sheru, a voice assistant. Answer in at most three short spoken sentences from your own "
                  "knowledge. If it truly needs live/current data you don't have, say so in one sentence."
-                 + config.reply_directive())
+                 + config.reply_directive(text))
         sys_p += ("\n\n" + extra_system if extra_system else "")
         msgs = [{"role": "system", "content": sys_p}, *(history or []), {"role": "user", "content": text}]
         prompt = self._tok.apply_chat_template(msgs, add_generation_prompt=True, enable_thinking=False)
