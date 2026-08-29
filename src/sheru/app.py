@@ -101,6 +101,11 @@ class Sheru:
             return res.speech
         if getattr(res, "draft", None):
             return self._start_draft(res.draft, sink)
+        if getattr(res, "search", None):
+            if res.speech:
+                sink(res.speech)                 # "Let me check." ack
+            self._search_local(res.search, sink, user_text=text)
+            return res.speech
         if res.handoff:
             if res.speech:
                 sink(res.speech)
@@ -574,6 +579,29 @@ class Sheru:
             return "artifact-run"
         sink("Say 'yes' to run it, or 'move it to a folder'.")
         return "artifact-reoffer"
+
+    def _search_local(self, query: str, sink, user_text: str | None = None) -> None:
+        """LOCAL web-search + summarize (on-device model). Escalate to Claude ONLY if it can't answer — this
+        keeps current-info queries off Claude, serving the local-first goal. Stays in the 'local' orb colour."""
+        from .actions import search_local
+        if user_text is not None:
+            self._record_turn(user_text, None)
+
+        def _go():
+            ans = None
+            try:
+                ans = search_local.search_and_summarize(query, self.llm)
+            except Exception as e:
+                log.warning("local search failed: %s", e)
+            if ans:
+                log.info("answered LOCALLY via web-search + summarize")
+                sink(ans)
+                self.router.history.append({"role": "assistant", "content": ans[:800]})
+                self.allow_followup(12)
+            else:
+                log.info("local search couldn't answer -> escalating to Claude")
+                self._delegate(query, sink)      # genuine fallback (rare)
+        threading.Thread(target=_go, name="sheru-search", daemon=True).start()
 
     def allow_followup(self, seconds: float = 6.0) -> None:
         self.followup_until = time.monotonic() + seconds

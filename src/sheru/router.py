@@ -42,6 +42,7 @@ class Result:
     tier: int = 0
     tool: str | None = None       # tool chosen (for the journal)
     args: dict | None = None
+    search: str | None = None     # query -> LOCAL web-search + summarize (on-device); escalate to Claude only if it can't answer
     draft: dict | None = None     # {recipient, gist, app} -> app starts a draft/confirm flow
     resolve_song: str | None = None  # query the app should resolve via Claude, then play
     played: str | None = None        # the song query just played (so "no, wrong song" can re-resolve)
@@ -312,7 +313,7 @@ class Router:
             config.update_profile("location", loc)
             return Result(f"Got it — I'll use {loc} as your location.")
         if kind == "current":
-            return Result("Let me check.", handoff=location.localize(m.group(0)), tier=2, followup=True)
+            return Result("Let me check.", search=location.localize(m.group(0)), tier=1, followup=True)
         if kind == "weather":
             raw = m.group(0)
             city = location.describe() or "your area"
@@ -326,17 +327,16 @@ class Router:
             return Result("", handoff=f"What is the current weather in {city} right now? "
                           f"Reply with a brief, natural 1-2 sentence spoken summary.", tier=2, followup=True)
         if kind == "search_summarize":
-            topic = location.localize(g[0].strip())
-            return Result("On it.", handoff=f"Search the web and give a brief spoken summary of: {topic}", tier=2, followup=True)
+            return Result("On it.", search=location.localize(g[0].strip()), tier=1, followup=True)
         if kind == "summarize":
             topic = (g[0] or "").strip() if g and len(g) > 0 else ""
             if topic:
-                task = f"Search the web and give a brief spoken summary of: {location.localize(topic)}"
+                q = location.localize(topic)
             elif web.last_query():
-                task = f"Search the web for '{web.last_query()}' and give a brief spoken summary of the top results."
+                q = web.last_query()
             else:
                 return Result("Summarize what? Say, for example, 'summarize the weather in Ravangla'.")
-            return Result("On it.", handoff=task, tier=2, followup=True)
+            return Result("On it.", search=q, tier=1, followup=True)
         if kind == "vol_up":
             return Result(system.change_volume(15))
         if kind == "skip":
