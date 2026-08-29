@@ -121,8 +121,9 @@ SARVAM_STT_FALLBACK = os.environ.get("SHERU_SARVAM_STT_FALLBACK") or _P.get("sar
 REPLY_LANG = os.environ.get("SHERU_REPLY_LANG") or _P.get("reply_lang") or "auto"
 
 _REPLY_DIRECTIVE = {
-    "auto": " Reply in the same language the user spoke. If they spoke Hindi or Hinglish, reply in Hindi using"
-            " Devanagari script.",
+    "auto": " Match the user's language exactly: if they wrote mainly in English / Latin script, reply in English"
+            " (even if it contains a few Hindi names or song titles); reply in Hindi using Devanagari script ONLY"
+            " when they actually spoke Hindi.",
     "hi": " Always reply in Hindi, using Devanagari script, however the user phrased the question.",
     "en": " Reply in English.",
 }
