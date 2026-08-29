@@ -73,6 +73,7 @@ class Router:
         (re.compile(r"^(?:play|put on|start)\s+(.+?)\s+(?:on|in)\s+(?:the\s+)?(?:browser|web|zen|brave)$"), "youtube"),
         (re.compile(r"^(?:message|dm|text|write to)\s+(.+?)\s+on\s+linked ?in(?:\s+(?:that|saying|to say)\s+(.+))?$"), "linkedin"),
         (re.compile(r"^(?:open|check|show me|go to)\s+(?:my\s+)?(?:g ?mail|email|inbox)\b.*$"), "gmail_open"),
+        (re.compile(r"^(?:email|e-?mail|send an email to|compose an email to)\s+(.+?)(?:\s+(?:that|saying|to say|about)\s+(.+))?$"), "gmail_compose"),
         (re.compile(r"^(?:use|switch to|open)\s+(brave|google chrome|chrome|zen|firefox)(?:\s+browser)?$"), "use_browser"),
         (re.compile(r"^(?:use|switch to|go to|open)\s+(?:the\s+)?(.+?)(?:['’]s)?\s+profile\b.*$"), "profile"),
         (re.compile(r"^(?:open|launch|start|run)\s+(?:the\s+)?(.+?)(?:\s+(?:app|application|browser))?$"), "open"),
@@ -171,6 +172,15 @@ class Router:
         if kind == "gmail_open":
             browser.launch("https://mail.google.com/")
             return Result(f"Opening Gmail in {browser.describe()}.", followup=True)
+        if kind == "gmail_compose":
+            import urllib.parse as _u
+            who = g[0].strip(); body = (g[1] or "").strip()
+            to = who if "@" in who else ""
+            url = ("https://mail.google.com/mail/?view=cm&fs=1"
+                   + (f"&to={_u.quote(to)}" if to else "") + (f"&body={_u.quote(body)}" if body else ""))
+            browser.launch(url)                       # opens a prefilled draft; you review + send (never auto-sent)
+            tail = f" to {who}" if to else (f" — add {who}'s email" if who else "")
+            return Result(f"Opened a Gmail draft{tail}. Review and send.", followup=True)
         if kind == "linkedin":
             import urllib.parse as _u, subprocess as _s
             who = g[0].strip(); msg = (g[1] or "").strip()
