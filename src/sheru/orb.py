@@ -12,6 +12,7 @@ listening ends -> orb fades. (Metal fluid-blob = approach B, particle swirl = D 
 from __future__ import annotations
 
 import math
+import sys
 import threading
 import time
 
@@ -23,7 +24,7 @@ from AppKit import (
 )
 from Foundation import NSMakeRect, NSObject, NSPoint
 from PyObjCTools import AppHelper
-from Quartz import CAGradientLayer, CATransaction, CATransform3DMakeScale
+from Quartz import CAGradientLayer, CAEmitterLayer, CAEmitterCell, CATransaction, CATransform3DMakeScale
 
 WIN, ORB = 140, 50           # WIN = transparent window sized to sit flush in the corner (room for the glow +
 #                              swell, no clipping, no menu-bar overlap); ORB = the orb disc diameter
@@ -92,6 +93,7 @@ class ListeningOrb(NSObject):
         self._on_click = on_click
         self._panel = None
         self._timer = None
+        self._view_cls = _OrbView          # swap to _ParticleView for the particle style
         return self
 
     @objc.python_method
@@ -105,7 +107,7 @@ class ListeningOrb(NSObject):
         p.setBackgroundColor_(NSColor.clearColor())
         p.setHasShadow_(False)
         p.setIgnoresMouseEvents_(False)
-        view = _OrbView.alloc().initWithFrame_click_(NSMakeRect(0, 0, WIN, WIN), self._on_click)
+        view = self._view_cls.alloc().initWithFrame_click_(NSMakeRect(0, 0, WIN, WIN), self._on_click)
         p.setContentView_(view)
         self._view = view
         # place the ORB (centred in the roomy window) near the top-right corner, under the menu bar; the extra
@@ -142,6 +144,70 @@ class ListeningOrb(NSObject):
         AppHelper.callAfter(do)
 
 
+# ---- approach D: audio-reactive particle swirl (CAEmitterLayer) ----------------------------------------------
+def _dot_image(d: int = 48):
+    """A soft warm radial dot (CGImage) used as the particle sprite."""
+    from Quartz import (
+        CGColorSpaceCreateDeviceRGB, CGBitmapContextCreate, CGGradientCreateWithColorComponents,
+        CGContextDrawRadialGradient, CGBitmapContextCreateImage,
+        kCGImageAlphaPremultipliedLast, kCGGradientDrawsAfterEndLocation,
+    )
+    cs = CGColorSpaceCreateDeviceRGB()
+    ctx = CGBitmapContextCreate(None, d, d, 8, d * 4, cs, kCGImageAlphaPremultipliedLast)
+    grad = CGGradientCreateWithColorComponents(
+        cs, [1.0, 0.93, 0.70, 1.0,  1.0, 0.55, 0.12, 0.0], [0.0, 1.0], 2)   # warm core -> transparent
+    c = d / 2.0
+    CGContextDrawRadialGradient(ctx, grad, (c, c), 0.0, (c, c), c, kCGGradientDrawsAfterEndLocation)
+    return CGBitmapContextCreateImage(ctx)
+
+
+class _ParticleView(NSView):
+    def initWithFrame_click_(self, frame, on_click):
+        self = objc.super(_ParticleView, self).initWithFrame_(frame)
+        if self is None:
+            return None
+        self._on_click = on_click
+        self.setWantsLayer_(True)
+        self.layer().setMasksToBounds_(False)
+        em = CAEmitterLayer.layer()
+        em.setEmitterPosition_((WIN / 2, WIN / 2))
+        em.setEmitterShape_("point")
+        em.setEmitterMode_("outline")
+        em.setRenderMode_("additive")                        # glowy, particles add light where they overlap
+        cell = CAEmitterCell.emitterCell()
+        cell.setContents_(_dot_image())
+        cell.setBirthRate_(150.0)
+        cell.setLifetime_(1.3)
+        cell.setLifetimeRange_(0.5)
+        cell.setVelocity_(28.0)
+        cell.setVelocityRange_(15.0)
+        cell.setEmissionRange_(math.pi * 2)                  # fly out in every direction
+        cell.setScale_(0.26)
+        cell.setScaleRange_(0.16)
+        cell.setScaleSpeed_(-0.16)                           # shrink over life
+        cell.setAlphaSpeed_(-0.85)                           # fade out (before hitting the window edge)
+        cell.setSpin_(1.2)
+        cell.setColor_(NSColor.colorWithSRGBRed_green_blue_alpha_(1.0, 0.6, 0.15, 1.0).CGColor())
+        em.setEmitterCells_([cell])
+        em.setBirthRate_(0.35)                               # idle multiplier: a gentle drizzle at rest
+        self.layer().addSublayer_(em)
+        self._em = em
+        return self
+
+    @objc.python_method
+    def apply_level(self, v):
+        v = max(0.0, min(1.0, v))
+        CATransaction.begin()
+        CATransaction.setDisableActions_(True)
+        self._em.setBirthRate_(0.3 + 2.4 * v)                # burst more particles as you speak…
+        self._em.setVelocity_(0.6 + 1.5 * v)                 # …and throw them out faster
+        CATransaction.commit()
+
+    def mouseDown_(self, event):
+        if self._on_click:
+            self._on_click()
+
+
 # ---- standalone preview: shows the orb reacting to your mic for ~20s ------------------------------------------
 def _mic_sampler():
     """Fill _amp['v'] with a smoothed live mic level (0..1) so the preview is audio-reactive."""
@@ -167,8 +233,12 @@ def _mic_sampler():
 
 
 def main():
+    particles = "particles" in sys.argv[1:] or "p" in sys.argv[1:]
     app = NSApplication.sharedApplication()
-    orb = ListeningOrb.alloc().initWithOnClick_(lambda: print("orb clicked -> (would open chat)"))
+    orb = ListeningOrb.alloc().initWithOnClick_(lambda: print("clicked -> (would open chat)"))
+    if particles:
+        orb._view_cls = _ParticleView
+    print(f"style: {'particles' if particles else 'orb'}  (use `python -m sheru.orb particles` for the other)")
     orb.show()
     threading.Thread(target=_mic_sampler, daemon=True).start()
 
