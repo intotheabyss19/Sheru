@@ -106,6 +106,9 @@ class Router:
         (re.compile(r"^(?:turn\s+(?:it\s+)?|volume\s+)?(up|down)(?:\s+the\s+volume)?$|^(?:turn\s+)?(?:the\s+)?volume\s+(up|down)$"), "volume_delta"),
         (re.compile(r"^(mute|unmute)\b"), "mute"),
         (re.compile(r"^(play|pause|resume|next|skip|previous|back)(?:\s+(?:song|track|music))?$"), "media"),
+        # "schedule … for/at 3 pm" -> a clock-time alarm (only when a real time token is present, else it falls
+        # through to Claude). Journal showed "schedule this movie for 3 PM" misfiring into a 180-minute timer.
+        (re.compile(r"^schedule\b.*\b(?:at|for)\s+(.*\b(?:a\.?m\.?|p\.?m\.?|o'?clock|quarter|half|past|noon|midnight|\d)\b.*)$"), "alarm"),
         (re.compile(r"^(?:set\s+)?(?:a\s+)?timer\s+(?:for\s+)?(\S+)\s+(minutes?|mins?|seconds?|secs?|hours?)$"), "timer"),
         (re.compile(r"^(?:set|create|put|start)?\s*(?:an?\s+)?alarm\b(?:\s+(?:for|at)\b)?\s*(.*)$"), "alarm"),
         (re.compile(r"^wake me(?:\s+up)?\b(?:\s+(?:at|in)\b)?\s*(.*)$"), "alarm"),
@@ -257,6 +260,8 @@ class Router:
         if kind == "alarm":
             from . import reminders, alarms
             raw = next((x for x in g if x), "").strip().rstrip(".")
+            raw = re.sub(r"^(?:like|about|around|approximately|maybe|say|roughly|just)\s+", "", raw).strip()
+            raw = re.sub(r"^(?:this\s+\w+\s+)?(?:today|tonight)\s+(?:only\s+)?(?:at|for)\s+", "", raw).strip()
             if not raw:
                 return Result("When should the alarm be? Say 'set an alarm for 7 a.m.' or 'wake me in 20 minutes'.")
             probe = raw if re.search(r"\b(in|at)\b", raw) else f"at {raw}"
@@ -326,6 +331,9 @@ class Router:
             q = g[0].strip()
             if q in {"music", "the music", "song", "a song", "some music", "something", "it", "the song"}:
                 return Result(system.media("play"))
+            if q in {"a video", "video", "videos", "some video", "a tutorial", "tutorial", "a clip", "clip"}:
+                # "play a video" must NOT be treated as a song title (it used to play a random misheard track)
+                return Result("A video of what? Say, for example, 'play a CPR tutorial on YouTube'.", followup=True)
             r = music.play_song(q)
             if r == "__RESOLVE_WITH_CLAUDE__":
                 if re.search(r"\bspotify\b", m.group(0)):
