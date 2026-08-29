@@ -319,7 +319,10 @@ class Sheru:
         self._ptt_thread.start()
 
     def _listen_and_handle(self) -> None:
-        from .audio import capture_once
+        from .audio import capture_once, ListenerConfig, preferred_device
+        # follow-up captures (after a reply) use a MUCH higher VAD threshold + a little more trailing silence, so a
+        # continued conversation needs deliberate speech and background noise / room chatter doesn't keep it going.
+        fu_cfg = ListenerConfig(vad_threshold=0.6, min_speech_s=0.4, end_silence_s=0.55, device=preferred_device())
         if not getattr(self, "_warm", False):
             if self.panel is not None:
                 self.panel._set_out("⏳ Warming up models… one moment.")
@@ -340,7 +343,7 @@ class Sheru:
                     self.panel.set_status("🎙 listening…")
                     if first:
                         self.panel._set_out("Listening…")
-                audio = capture_once(max_wait=8.0)
+                audio = capture_once(max_wait=8.0, cfg=(None if first else fu_cfg))   # stricter on follow-ups
                 if audio is None:
                     if first and self.panel is not None:
                         self.panel._set_out("(didn't catch anything — speak a bit louder/closer)")
