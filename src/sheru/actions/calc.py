@@ -72,8 +72,20 @@ def _to_expr(text: str, last=None) -> str:
     return ts.strip()
 
 
+_KNOWN_WORDS = {
+    "plus", "and", "add", "added", "minus", "subtract", "subtracted", "less", "take", "away", "times",
+    "multiplied", "multiply", "by", "divided", "divide", "over", "to", "the", "power", "of", "raised",
+    "mod", "modulo", "square", "root", "sqrt", "factorial", "squared", "cubed", "percent", "that", "it",
+    "this", "result", "answer", "total", "value", "previous", "what", "whats", "is", "calculate", "compute",
+    "how", "much", "equals", "equal", "please", "a", "an", "x", "pi", "e", "tau", "from", "point",
+}
+
+
 def calc(text: str, last=None):
     """Return the numeric value for a math utterance, or None if it isn't confidently math."""
+    noise = [w for w in re.findall(r"[a-z]+", text.lower()) if w not in _KNOWN_WORDS]
+    if len(noise) > 1:                                     # 'add 2 apples and 3 oranges' -> not a calculation
+        return None
     expr = _to_expr(text, last)
     if not re.search(r"\d", expr) or not re.search(r"[+\-*/%]|sqrt|factorial|pi|\be\b", expr):
         return None                                        # needs a number AND an operation — not a bare number

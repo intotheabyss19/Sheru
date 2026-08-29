@@ -97,7 +97,7 @@ class Router:
         (re.compile(r"^(?:reply|answer|talk|speak|respond)\s+(?:to me\s+|back\s+)?(?:in|only in)\s+(hindi|english|both|hinglish)\b.*$"), "set_reply_lang"),
         (re.compile(r"^(?:use|switch to|open)\s+(brave|google chrome|chrome|zen|firefox)(?:\s+browser)?$"), "use_browser"),
         (re.compile(r"^(?:use|switch to|go to|open)\s+(?:the\s+)?(.+?)(?:['’]s)?\s+profile\b.*$"), "profile"),
-        (re.compile(r"^(?:open|launch|start|run)\s+(?:the\s+)?(.+?)(?:\s+(?:app|application|browser))?$"), "open"),
+        (re.compile(r"^(?:open|launch|start|run)\s+(?:the\s+)?(?!(?:a\s+|an\s+|my\s+)?(?:timer|alarm|stopwatch|reminder|countdown)\b)(?:a\s+|an\s+|my\s+)?(.+?)(?:\s+(?:app|application|browser))?$"), "open"),
         (re.compile(r"^(?:quit|close|kill)\s+(?!all (?:my|the|your) )(?:the\s+)?(.+?)(?:\s+(?:app|application))?$"), "quit"),
         (re.compile(r"^(?:switch|go|jump)\s+to\s+(?:the\s+)?(.+?)\s+profile$"), "profile"),
         (re.compile(r"^(?:use|switch to|search (?:with|on))\s+(google|duck ?duck ?go|bing)\b.*"), "engine"),
@@ -123,7 +123,7 @@ class Router:
         # "schedule … for/at 3 pm" -> a clock-time alarm (only when a real time token is present, else it falls
         # through to Claude). Journal showed "schedule this movie for 3 PM" misfiring into a 180-minute timer.
         (re.compile(r"^schedule\b.*\b(?:at|for)\s+(.*\b(?:a\.?m\.?|p\.?m\.?|o'?clock|quarter|half|past|noon|midnight|\d)\b.*)$"), "alarm"),
-        (re.compile(r"^(?:set\s+)?(?:a\s+)?timer\s+(?:for\s+)?(\S+)\s+(minutes?|mins?|seconds?|secs?|hours?)$"), "timer"),
+        (re.compile(r"^(?:set|start|create|put|begin)?\s*(?:a\s+)?timer\s+(?:for\s+)?(\S+)\s+(minutes?|mins?|seconds?|secs?|hours?)$"), "timer"),
         (re.compile(r"^(?:set|create|put|start)?\s*(?:an?\s+)?alarm\b(?:\s+(?:for|at)\b)?\s*(.*)$"), "alarm"),
         (re.compile(r"^wake me(?:\s+up)?\b(?:\s+(?:at|in)\b)?\s*(.*)$"), "alarm"),
         (re.compile(r"^(?:what(?:'s| is)(?: the)? )?time(?:\s+(?:is it|now|right now))?\??$|^what time (?:is it|now)|^(?:do you have|got|whats|tell me)(?: the)? time\??$|^what'?s the time"), "time"),
