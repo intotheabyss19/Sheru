@@ -172,12 +172,15 @@ class Router:
             browser.launch("https://mail.google.com/")
             return Result(f"Opening Gmail in {browser.describe()}.", followup=True)
         if kind == "linkedin":
-            import urllib.parse as _u
+            import urllib.parse as _u, subprocess as _s
             who = g[0].strip(); msg = (g[1] or "").strip()
             browser.launch("https://www.linkedin.com/search/results/people/?keywords=" + _u.quote(who))
-            pre = f"Draft to {who}: “{msg}”. " if msg else ""
-            return Result(pre + f"I've opened {who} on LinkedIn — auto-sending needs the one-time browser setup, "
-                          "then I'll draft and send with your confirmation.", followup=True)
+            if msg:
+                # safe prefill: message onto the clipboard to paste — no auto-send to a possibly-wrong person
+                _s.run(["pbcopy"], input=msg.encode(), check=False)
+                return Result(f"Opened {who} on LinkedIn and copied your message to the clipboard — open the chat "
+                              "and paste it (Command-V) to send.", followup=True)
+            return Result(f"Opened {who} on LinkedIn.", followup=True)
         if kind == "engine":
             return Result(web.set_search_engine(g[0]))
         if kind == "images":
