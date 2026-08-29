@@ -11,7 +11,16 @@ is on (Kokoro + Whisper) — no Sarvam credits burned.
 | "**open gmail**" / "check my email" | opens Gmail in the current browser+profile | ✅ |
 | "**use brave**" / "use chrome" / "use zen" | picks the automation browser | ✅ |
 | "**use piyush's profile**" / "use moon('s) profile" / "switch to X profile" | launches Brave with that profile (`Piyush`=Profile 2, `moon`=Profile 4, discovered live) | ✅ |
+| "set an alarm for **eleven fifteen a.m.**" / "wake me at **half past six**" / "**quarter to eight**" | spoken clock times now parse (was unparseable → this was a real bug from your logs) | ✅ |
+| "**play X**" (no platform) | Spotify if it has a confident match, else **falls back to YouTube** (no more "couldn't find it" dead-ends); "play X **on spotify**" still uses Spotify | ✅ |
+| "message `<name>` **on linkedin** saying `<text>`" | opens their LinkedIn + copies the message to clipboard to paste (safe; no auto-send to a wrong person) | ✅ |
 | all prior: apps, alarms/timers/reminders (with a **bell**), weather, messages, files, trainer, memory | — | ✅ |
+
+## 🔁 The self-improvement loop (your "check logs + improve each session")
+Run **`uv run python scripts/review_logs.py`** at the start of any session — it reads `data/journal.jsonl` and
+surfaces the **fix list**: FAIL/negative turns, phrasings you had to correct, and the intent mix. I used it this
+session and it caught the "eleven fifteen → 660-minute timer" bug, now fixed. This is how "improve Sheru each
+time" works day-to-day; actual model fine-tuning is the periodic RunPod step (§ below).
 
 **Routing checked across 42 JARVIS scenarios — all correct.** Full stress test held at ~81% (rest are known
 adversarial idioms). Grammar broadened: "that's enough"→stop, "what did I just copy"→clipboard, "from now on…".
