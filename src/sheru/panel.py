@@ -13,6 +13,7 @@ import objc
 from AppKit import (
     NSPanel, NSTextField, NSTextView, NSScrollView, NSBox, NSColor, NSFont, NSApp, NSButton, NSView,
     NSVisualEffectView, NSAttributedString, NSFontAttributeName, NSForegroundColorAttributeName,
+    NSEvent, NSEventMaskLeftMouseDown, NSEventMaskRightMouseDown,
     NSWindowStyleMaskBorderless, NSWindowStyleMaskNonactivatingPanel,
     NSFloatingWindowLevel, NSWindowCollectionBehaviorCanJoinAllSpaces,
     NSWindowCollectionBehaviorStationary, NSBackingStoreBuffered,
@@ -35,6 +36,9 @@ class _Panel(NSPanel):
     def canBecomeKeyWindow(self):
         return True
 
+    def canBecomeMainWindow(self):
+        return False
+
 
 class TypePanel(NSObject):
     """Owns the panel; call show(). `on_submit(text, sink)` routes the request; sink appends reply text."""
@@ -54,6 +58,7 @@ class TypePanel(NSObject):
         self._card = None                  # Siri-style message card (NSView) while confirming a message
         self._on_send = None
         self._on_cancel = None
+        self._click_mon = None             # global click-away monitor (true dismiss, no resignKey false-positives)
         return self
 
     @objc.python_method
@@ -72,7 +77,9 @@ class TypePanel(NSObject):
         p.setBackgroundColor_(NSColor.clearColor())
         p.setHasShadow_(True)
         p.setMovableByWindowBackground_(True)
-        p.setDelegate_(self)               # so windowDidResignKey_ can dismiss on click-away
+        p.setHidesOnDeactivate_(False)     # don't self-vanish on app-deactivate; we dismiss via a click-away monitor
+        p.setAnimationBehavior_(2)         # NSWindowAnimationBehaviorNone — removes the show/hide fade that reads as flicker
+        p.setReleasedWhenClosed_(False)    # the instance survives hide/show
 
         # frosted-glass backing with rounded corners
         vev = NSVisualEffectView.alloc().initWithFrame_(NSMakeRect(0, 0, W, H))
@@ -178,16 +185,30 @@ class TypePanel(NSObject):
         self._render_recent()
         NSApp.activateIgnoringOtherApps_(True)
         self._panel.makeKeyAndOrderFront_(None)
+        self._panel.orderFrontRegardless()
         self._panel.makeFirstResponder_(self._field)
+        self._install_click_monitor()        # dismiss on a real click in another app (no resignKey false-positives)
 
     @objc.python_method
     def hide(self):
+        self._remove_click_monitor()
         if self._panel is not None:
             self._panel.orderOut_(None)
 
-    # dismiss on click-away (Spotlight behaviour): the panel resigns key -> hide it
-    def windowDidResignKey_(self, notification):
-        self.hide()
+    # click-away dismiss via a GLOBAL mouse-down monitor — fires only for clicks in OTHER apps (true click-away),
+    # never for our own subviews or the activation churn that made windowDidResignKey_ flash the panel.
+    @objc.python_method
+    def _install_click_monitor(self):
+        if self._click_mon is not None:
+            return
+        self._click_mon = NSEvent.addGlobalMonitorForEventsMatchingMask_handler_(
+            NSEventMaskLeftMouseDown | NSEventMaskRightMouseDown, lambda e: self.hide())
+
+    @objc.python_method
+    def _remove_click_monitor(self):
+        if self._click_mon is not None:
+            NSEvent.removeMonitor_(self._click_mon)
+            self._click_mon = None
 
     @objc.python_method
     def is_visible(self):
