@@ -82,6 +82,8 @@ class Sheru:
             sink("Cancelled.")
             return "Cancelled."
         res = self.router.route(text)
+        if self.panel is not None:
+            self.panel.set_source("local")     # default ⚡ local; _start_progress flips it to ☁️ claude on escalation
         if getattr(res, "feedback", None):
             self.journal.label_last(res.feedback, note="explicit-rating")   # rate the PREVIOUS action before logging this turn
         self.journal.record(utterance=text, tier=res.tier, tool=getattr(res, "tool", None),
@@ -377,6 +379,10 @@ class Sheru:
         from PyObjCTools import AppHelper
         self._progress_label = label
         self._progress_t0 = _t.monotonic()
+        if self.orb is not None:                            # recolour the orb: blue = escalated to Claude
+            self.orb.set_state("claude" if "Claude" in label else "local")
+        if self.panel is not None:                          # and tag the chat turn ⚡ local / ☁️ Claude
+            self.panel.set_source("claude" if "Claude" in label else "local")
         def _mk(_):
             self._progress_timer = NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
                 1.0, _ProgressTarget.alloc().initWithApp_(self), "tick:", None, True)
@@ -393,6 +399,8 @@ class Sheru:
         if t is not None:
             t.invalidate(); self._progress_timer = None
         self._progress_t0 = None
+        if self.orb is not None:                            # back to local (orange) once Claude is done
+            self.orb.set_state("local")
         if self.panel is not None:
             self.panel.set_status("")
 

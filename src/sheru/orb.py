@@ -29,6 +29,11 @@ from Quartz import CALayer, CAGradientLayer, CAEmitterLayer, CAEmitterCell, CATr
 WIN, ORB = 140, 50           # WIN = transparent window sized to sit flush in the corner (room for the glow +
 #                              swell, no clipping, no menu-bar overlap); ORB = the orb disc diameter
 _amp = {"v": 0.0}            # shared live mic amplitude 0..1 (smoothed), written by the sampler thread
+# the animation recolours to show WHO handled the request — the local-first indicator Yash asked for.
+_STATE = {
+    "local":  (1.0, 0.60, 0.15),    # lion/sun orange — handled ON-DEVICE (grammar / local model)
+    "claude": (0.30, 0.62, 1.0),    # cloud blue — escalated to Claude (should be rare, <~10%)
+}
 
 
 class _OrbView(NSView):
@@ -72,6 +77,19 @@ class _OrbView(NSView):
         CATransaction.begin()
         CATransaction.setDisableActions_(True)
         self._orb.setTransform_(_scale(s))
+        CATransaction.commit()
+
+    @objc.python_method
+    def set_state(self, state):                              # local (orange) vs claude (blue)
+        r, g, b = _STATE.get(state, _STATE["local"])
+        CATransaction.begin()
+        CATransaction.setDisableActions_(True)
+        self._orb.setColors_([
+            NSColor.colorWithSRGBRed_green_blue_alpha_(min(1.0, r + 0.30), min(1.0, g + 0.30), min(1.0, b + 0.30), 1.0).CGColor(),
+            NSColor.colorWithSRGBRed_green_blue_alpha_(r, g, b, 1.0).CGColor(),
+            NSColor.colorWithSRGBRed_green_blue_alpha_(max(0.0, r - 0.10), max(0.0, g - 0.25), max(0.0, b - 0.10), 0.0).CGColor(),
+        ])
+        self._orb.setShadowColor_(NSColor.colorWithSRGBRed_green_blue_alpha_(r, g, b, 1.0).CGColor())
         CATransaction.commit()
 
     def mouseDown_(self, event):
@@ -143,6 +161,14 @@ class ListeningOrb(NSObject):
                 self._view.apply_level(v)
         AppHelper.callAfter(do)
 
+    @objc.python_method
+    def set_state(self, state):
+        def do():
+            v = getattr(self, "_view", None)
+            if v is not None and hasattr(v, "set_state"):
+                v.set_state(state)
+        AppHelper.callAfter(do)
+
 
 # ---- approach D: audio-reactive particle swirl (CAEmitterLayer) ----------------------------------------------
 def _dot_image(d: int = 48):
@@ -192,6 +218,7 @@ class _ParticleView(NSView):
         em.setBirthRate_(0.35)                               # idle multiplier: a gentle drizzle at rest
         self.layer().addSublayer_(em)
         self._em = em
+        self._cell = cell
         return self
 
     @objc.python_method
@@ -201,6 +228,15 @@ class _ParticleView(NSView):
         CATransaction.setDisableActions_(True)
         self._em.setBirthRate_(0.3 + 2.4 * v)                # burst more particles as you speak…
         self._em.setVelocity_(0.6 + 1.5 * v)                 # …and throw them out faster
+        CATransaction.commit()
+
+    @objc.python_method
+    def set_state(self, state):                              # local (orange) vs claude (blue)
+        r, g, b = _STATE.get(state, _STATE["local"])
+        CATransaction.begin()
+        CATransaction.setDisableActions_(True)
+        self._cell.setColor_(NSColor.colorWithSRGBRed_green_blue_alpha_(r, g, b, 1.0).CGColor())
+        self._em.setEmitterCells_([self._cell])              # re-apply so new particles take the colour
         CATransaction.commit()
 
     def mouseDown_(self, event):
@@ -249,6 +285,16 @@ class _RingsView(NSView):
             ring.setOpacity_(float(max(0.0, 1.0 - f) * (0.35 + 0.65 * v)))
         CATransaction.commit()
 
+    @objc.python_method
+    def set_state(self, state):
+        r, g, b = _STATE.get(state, _STATE["local"])
+        col = NSColor.colorWithSRGBRed_green_blue_alpha_(r, g, b, 1.0).CGColor()
+        CATransaction.begin()
+        CATransaction.setDisableActions_(True)
+        for ring in self._rings:
+            ring.setBorderColor_(col)
+        CATransaction.commit()
+
     def mouseDown_(self, event):
         if self._on_click:
             self._on_click()
@@ -287,6 +333,16 @@ class _BarsView(NSView):
             amp = (0.25 + 0.75 * v) * (0.4 + 0.6 * (0.5 + 0.5 * math.sin(t * 7.0 + i * 1.3)))
             h = 12 + amp * 66
             bar.setFrame_(NSMakeRect(x, cy - h / 2, bw, h))
+        CATransaction.commit()
+
+    @objc.python_method
+    def set_state(self, state):
+        r, g, b = _STATE.get(state, _STATE["local"])
+        col = NSColor.colorWithSRGBRed_green_blue_alpha_(r, g, b, 1.0).CGColor()
+        CATransaction.begin()
+        CATransaction.setDisableActions_(True)
+        for bar, x, bw in self._bars:
+            bar.setBackgroundColor_(col)
         CATransaction.commit()
 
     def mouseDown_(self, event):

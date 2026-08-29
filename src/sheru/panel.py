@@ -65,7 +65,12 @@ class TypePanel(NSObject):
         self._quick = None                 # quick-actions row (NSView)
         self._sw_timer = None              # reply stopwatch NSTimer
         self._sw_t0 = None
+        self._next_src = "local"           # who handled the CURRENT reply: 'local' (⚡) or 'claude' (☁️)
         return self
+
+    @objc.python_method
+    def set_source(self, src):
+        self._next_src = src
 
     @objc.python_method
     def set_history_provider(self, fn):
@@ -216,7 +221,8 @@ class TypePanel(NSObject):
                                                       NSColor.secondaryLabelColor(), 13))
         for turn in self._chat:
             you = turn["role"] == "you"
-            ts.appendAttributedString_(self._attr(("You   " if you else "Sheru   "),
+            label = "You   " if you else ("☁️ Sheru   " if turn.get("src") == "claude" else "⚡ Sheru   ")
+            ts.appendAttributedString_(self._attr(label,
                                                   NSColor.systemBlueColor() if you else NSColor.tertiaryLabelColor(), 11))
             ts.appendAttributedString_(self._attr((turn.get("text") or "…") + "\n",
                                                   NSColor.labelColor() if you else NSColor.secondaryLabelColor(), 15))
@@ -379,12 +385,13 @@ class TypePanel(NSObject):
             self._clear_card()
             if self._chat and self._chat[-1]["role"] == "sheru":
                 t = self._chat[-1]
+                t["src"] = self._next_src
                 if t.get("pending"):
                     t["text"] = text; t["pending"] = False
                 else:
                     t["text"] = t["text"] + (" " if t["text"] and not t["text"].endswith((" ", "\n")) else "") + text
             else:
-                self._chat.append({"role": "sheru", "text": text})
+                self._chat.append({"role": "sheru", "text": text, "src": self._next_src})
             self._render_chat()
         AppHelper.callAfter(do)
 
