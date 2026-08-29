@@ -34,6 +34,12 @@ DEFAULT_SEED = [
     "i wanna watch the new mkbhd video", "open that notes app", "who won the 2011 cricket world cup",
     "silence everything", "text mom i'll call her after dinner", "pull up the weather for tomorrow",
     "throw on some music", "what's elon musk up to lately", "give me a 20 minute focus timer",
+    "play agar tum saath ho on spotify", "open youtube", "open netflix", "open my gmail",
+    "message satya that the repo is ready", "set an alarm for quarter past seven", "wake me at half past six",
+    "remind me to call the dentist tomorrow at four", "address gaurav as chief",
+    "ask claude to write a python script that renames files", "what's the capital of australia",
+    "increase the volume by 20 percent", "show me pictures of the himalayas", "play some arijit singh",
+    "tell piyush i'll join the call in five", "open twitter", "put on channa mereya",
 ]
 
 
@@ -126,8 +132,15 @@ def main():
                            for t in TOOLS)
     valid = {t["function"]["name"]: set(_params(t)) for t in TOOLS}
     env = _claude_env()
-    us = _utterances(args)[: args.limit]
     OUT.parent.mkdir(parents=True, exist_ok=True)
+    done = set()                                    # skip utterances already labeled (idempotent re-runs)
+    if OUT.exists():
+        for line in OUT.read_text().splitlines():
+            try:
+                done.add(json.loads(line)["utterance"].lower())
+            except Exception:
+                pass
+    us = [u for u in _utterances(args) if u.lower() not in done][: args.limit]
     labeled = []
     for i, u in enumerate(us, 1):
         d = _label(u, tool_lines, env, valid)
