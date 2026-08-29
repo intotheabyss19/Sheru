@@ -602,15 +602,34 @@ def run_menubar(app: Sheru) -> None:
 
     class SheruApp(rumps.App):
         def __init__(self):
-            from . import config
+            import rumps
+            from . import config, alarms
             icon = str(config.ROOT / "assets" / "menubar.png")
             super().__init__("Sheru", icon=icon, template=True, quit_button=None)
-            self.menu = ["🎙 Talk to Sheru", "Type to Sheru", "Setup / Permissions…", "🎵 Set up Spotify…", "Mute", None, "Quit Sheru"]
+            self._alarm_item = rumps.MenuItem("⏰ Alarms: none", callback=lambda _: app.show_alarms())
+            self._stop_item = rumps.MenuItem("🔔 Stop ringing", callback=lambda _: alarms.stop_ring())
+            self.menu = ["🎙 Talk to Sheru", "Type to Sheru", "Setup / Permissions…", "🎵 Set up Spotify…",
+                         "Mute", None, self._alarm_item, self._stop_item, None, "Quit Sheru"]
 
-        @rumps.timer(3)
+        @rumps.timer(2)
         def _tick(self, _):
+            self._refresh_alarms()
+
+        def _refresh_alarms(self):
+            # render the soonest alarm as the menu-bar title + item (the old code set title=None, erasing it)
             try:
-                self.title = None
+                from . import alarms
+                act = alarms.active()
+                ringing = alarms.is_ringing()
+                self.title = "🔔" if ringing else ("⏰" if act else None)
+                if ringing:
+                    self._alarm_item.title = "🔔 Alarm ringing — press Stop below"
+                elif act:
+                    n = act[0]
+                    extra = f"  +{len(act) - 1} more" if len(act) > 1 else ""
+                    self._alarm_item.title = f"⏰ {n['label']} in {alarms.human_remaining(n['remaining'])}{extra}"
+                else:
+                    self._alarm_item.title = "⏰ Alarms: none"
             except Exception:
                 pass
 
@@ -663,6 +682,9 @@ def run_menubar(app: Sheru) -> None:
     import os
     from .wizard import is_done
     sheru_app = SheruApp()                    # creates the NSApplication first
+    from . import alarms as _alarms
+    from PyObjCTools import AppHelper as _AH
+    _alarms.set_on_change(lambda: _AH.callAfter(sheru_app._refresh_alarms))   # refresh the menu bar when alarms change
     threading.Thread(target=app.warm, daemon=True).start()
     app.start_trigger_socket()
     if os.environ.get("SHERU_ALWAYS_ON"):
