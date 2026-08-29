@@ -74,6 +74,8 @@ class Router:
         (re.compile(r"^(?:message|dm|text|write to)\s+(.+?)\s+on\s+linked ?in(?:\s+(?:that|saying|to say)\s+(.+))?$"), "linkedin"),
         (re.compile(r"^(?:open|check|show me|go to)\s+(?:my\s+)?(?:g ?mail|email|inbox)\b.*$"), "gmail_open"),
         (re.compile(r"^(?:email|e-?mail|send an email to|compose an email to)\s+(.+?)(?:\s+(?:that|saying|to say|about)\s+(.+))?$"), "gmail_compose"),
+        (re.compile(r"^(?:use|switch to|change to)\s+(?:the\s+)?(sarvam|kokoro|local|apple|system)\s+voice\b.*$"), "set_voice"),
+        (re.compile(r"^(?:reply|answer|talk|speak|respond)\s+(?:to me\s+|back\s+)?(?:in|only in)\s+(hindi|english|both|hinglish)\b.*$"), "set_reply_lang"),
         (re.compile(r"^(?:use|switch to|open)\s+(brave|google chrome|chrome|zen|firefox)(?:\s+browser)?$"), "use_browser"),
         (re.compile(r"^(?:use|switch to|go to|open)\s+(?:the\s+)?(.+?)(?:['’]s)?\s+profile\b.*$"), "profile"),
         (re.compile(r"^(?:open|launch|start|run)\s+(?:the\s+)?(.+?)(?:\s+(?:app|application|browser))?$"), "open"),
@@ -165,6 +167,21 @@ class Router:
             return Result(browser.set_profile(g[0]))     # Brave profiles (piyush/moon/...); the automation browser
         if kind == "use_browser":
             return Result(browser.set_browser(g[0]))
+        if kind == "set_voice":
+            from . import config
+            v = g[0]
+            if v in ("kokoro", "local"):
+                config.set_tts("kokoro"); return Result("Okay, I'll use the local Kokoro voice.")
+            if v in ("apple", "system"):
+                config.set_tts("avspeech"); return Result("Okay, I'll use the built-in system voice.")
+            config.set_tts("sarvam")
+            return Result("Okay, I'll use the Sarvam voice." + ("" if config.SARVAM_API_KEY else " Note: no Sarvam key is set."))
+        if kind == "set_reply_lang":
+            from . import config
+            lang = {"hindi": "hi", "english": "en", "both": "auto", "hinglish": "auto"}.get(g[0], "auto")
+            config.set_reply_lang(lang)
+            return Result({"hi": "I'll reply in Hindi now.", "en": "I'll reply in English now.",
+                           "auto": "I'll reply in whichever language you speak."}[lang])
         if kind == "youtube":
             return Result(browser_agent.play_youtube(next((x for x in g if x), "").strip()), followup=True)
         if kind == "yt_music":

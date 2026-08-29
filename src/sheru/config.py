@@ -134,6 +134,20 @@ def reply_directive() -> str:
     return _REPLY_DIRECTIVE.get(REPLY_LANG, _REPLY_DIRECTIVE["auto"])
 
 
+def set_tts(backend: str) -> None:
+    """Switch the TTS engine at runtime (avspeech|kokoro|sarvam) and persist it — the Speaker reads it per call."""
+    global TTS_BACKEND
+    TTS_BACKEND = backend
+    update_profile("tts_backend", backend)
+
+
+def set_reply_lang(lang: str) -> None:
+    """Switch reply language at runtime (auto|hi|en) and persist it — reply_directive() reads it per call."""
+    global REPLY_LANG
+    REPLY_LANG = lang
+    update_profile("reply_lang", lang)
+
+
 def sarvam_lang_for(text: str) -> str:
     """Bulbul needs an explicit language_code — it has no auto-detect. "auto" means: Devanagari in the reply
     -> hi-IN, otherwise en-IN (Indian-accented English), so a Hinglish assistant doesn't read plain English
