@@ -44,7 +44,7 @@ def get(name: str) -> dict | None:
     key = name.strip().lower()
     if key in d:
         e = d[key]
-        return {"name": e["name"], "kind": "phone", "handle": e["handle"]}
+        return {"name": e["name"], "kind": "phone", "handle": e.get("handle"), "address": e.get("address")}
     from rapidfuzz import fuzz
     best, score = None, 0.0
     for k, e in d.items():
@@ -52,5 +52,33 @@ def get(name: str) -> dict | None:
         if s > score:
             best, score = e, s
     if best and score >= 82:
-        return {"name": best["name"], "kind": "phone", "handle": best["handle"]}
+        return {"name": best["name"], "kind": "phone", "handle": best.get("handle"), "address": best.get("address")}
     return None
+
+
+def set_address(name: str, address: str) -> str:
+    """Remember how to ADDRESS a contact in messages — e.g. saved as 'Crocodile' but addressed as 'Madam' — so a
+    private nickname is never sent as their real name. Attaches to the matched contact, or an address-only stub."""
+    d = _load()
+    key = name.strip().lower()
+    e = d.get(key)
+    if e is None:
+        hit = get(name)                       # attach to the best fuzzy match if there is one
+        if hit and hit.get("name"):
+            key = hit["name"].strip().lower()
+            e = d.get(key) or {"name": hit["name"], "handle": hit.get("handle")}
+        else:
+            e = {"name": name.strip()}
+    e["address"] = address.strip()
+    d[key] = e
+    _save(d)
+    return e["address"]
+
+
+def address_for(name: str) -> str:
+    """The greeting term for a contact: the stored address override if set, else what the user called them
+    (unchanged behaviour when no override exists — so only deliberately-set addresses alter a greeting)."""
+    c = get(name)
+    if c and c.get("address"):
+        return c["address"]
+    return name.strip()

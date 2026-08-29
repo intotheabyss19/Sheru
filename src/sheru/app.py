@@ -207,12 +207,14 @@ class Sheru:
             msg = f"I don't have {recipient}'s number saved. What's their WhatsApp number (with country code)?"
             sink(msg)
             return msg
-        draft = compose.draft(self.llm, recipient, d.get("gist", ""))
+        from .actions import contacts_book
+        address = contacts_book.address_for(recipient)     # e.g. saved 'Crocodile' -> greet as 'Madam'
+        draft = compose.draft(self.llm, address, d.get("gist", ""))
         self.pending = {"kind": "message", "recipient": recipient, "contact": contact,
                         "draft": draft, "gist": d.get("gist", ""), "app": d.get("app") or "whatsapp",
                         "ts": time.time(), "sink": sink}
         self._save_pending()
-        who = contact["name"] if contact else recipient
+        who = address if address.lower() != recipient.strip().lower() else (contact["name"] if contact else recipient)
         self._present_draft(who, draft, sink)
         return draft
 

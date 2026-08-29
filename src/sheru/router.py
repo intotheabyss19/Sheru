@@ -74,6 +74,9 @@ class Router:
         # local filesystem (no Claude needed): open a terminal in a dir, make folders/files
         (re.compile(r"^open\s+(?:a\s+|the\s+)?(?:terminal|ghostty|shell|command line|iterm)\s+(?:in|at|inside|here)\b\s*(.*)$"), "terminal_in"),
         (re.compile(r"^(?:make|create|new|touch|add)\s+(?:me\s+)?(?:a\s+|an\s+)?(?:new\s+)?((?:folder|directory|dir|file|text\s*file|txt\s*file|document|\.txt)\b.*)$"), "fs_make"),
+        # remember how to ADDRESS a contact in messages (saved nickname -> proper greeting)
+        (re.compile(r"^(?:address|refer to|greet)\s+(.+?)\s+as\s+(.+)$"), "set_address"),
+        (re.compile(r"^(?:when (?:messaging|texting)\s+)(.+?)\s*,?\s*(?:call|address|greet)\s+(?:her|him|them)?\s*(?:as\s+)?(.+)$"), "set_address"),
         # browser actions (Brave/piyush by default) — BEFORE the generic 'open' so 'open gmail' isn't an app-open
         (re.compile(r"^(?:play|put on|start|search)\s+(.+?)\s+on\s+(?:you ?tube music|yt music)\b.*$"), "yt_music"),
         (re.compile(r"^(?:play|put on|start)\s+(.+?)\s+on\s+(?:you ?tube|yt)\b.*$"), "youtube"),
@@ -355,6 +358,14 @@ class Router:
         if kind == "remember":
             msg = self.memory.remember(g[0]) if self.memory else "I don't have a memory store yet."
             return Result(msg)
+        if kind == "set_address":
+            from .actions import contacts_book
+            who = (g[0] or "").strip().rstrip(".")
+            addr = (g[1] or "").strip().strip("'\"").rstrip(".").title()   # route() lowercased it -> restore caps
+            if not who or not addr:
+                return Result("Say it like: address Crocodile as Madam.")
+            contacts_book.set_address(who, addr)
+            return Result(f"Got it — I'll address {who.title()} as {addr} in messages.")
         if kind == "claude":
             task = (g[0] or "").strip()
             from .actions import generate
