@@ -153,6 +153,11 @@ class Router:
         t = re.sub(r"[,\s]+(?:for me|a bit|a little|real quick|please|right away|if you can|thanks)$", "", t).strip()
         if not t:
             return Result("Yes?", followup=True)
+        from .actions import calc                       # fast, EXACT local math (before the grammar/LLM); None if not math
+        v = calc.calc(t, getattr(self, "_last_calc", None))
+        if v is not None:
+            self._last_calc = v                          # remember for continued calc ('times 2', 'plus 10', 'add 5 to that')
+            return Result(calc.speak_result(v), tool="calc", followup=True)
         for pat, kind in self.RULES:
             m = pat.match(t)
             if m:
