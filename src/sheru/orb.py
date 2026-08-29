@@ -260,6 +260,8 @@ def main():
     NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(1 / 30.0, t, "tick:", None, True)
     print("orb preview: speak into the mic — it should swell with your voice. ~22s. Click it to test the tap.")
     AppHelper.runConsoleEventLoop()
+    import os
+    os._exit(0)             # the daemon mic-sampler holds a PortAudio stream that hangs a clean exit — force it
 
 
 if __name__ == "__main__":

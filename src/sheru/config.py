@@ -55,6 +55,9 @@ STT_LANG = os.environ.get("SHERU_STT_LANG") or _P.get("stt_lang") or None
 # MacBook mic (best voice isolation + noise rejection). Set profile 'mic_device' (via the menu-bar picker) or SHERU_MIC.
 MIC_DEVICE = os.environ.get("SHERU_MIC") or _P.get("mic_device") or None
 
+# Listening animation shown on activation: "orb" (glowing orb, lightest) or "particles" (particle swirl).
+ORB_STYLE = os.environ.get("SHERU_ORB") or _P.get("orb_style") or "orb"
+
 
 def _claude_config_dir() -> str | None:
     """Which Claude login Tier-2 (`claude -p`) uses. The GUI/login-item launch inherits an EMPTY
@@ -149,6 +152,13 @@ def set_reply_lang(lang: str) -> None:
     global REPLY_LANG
     REPLY_LANG = lang
     update_profile("reply_lang", lang)
+
+
+def set_orb_style(style: str) -> None:
+    """Switch the listening animation ('orb'|'particles') and persist it."""
+    global ORB_STYLE
+    ORB_STYLE = style
+    update_profile("orb_style", style)
 
 
 def set_mic(device) -> None:

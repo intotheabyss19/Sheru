@@ -106,6 +106,9 @@ class Listener:
                 continue
 
 
+LEVEL = {"v": 0.0}      # live mic amplitude (0..1, smoothed) during capture_once — drives the listening orb
+
+
 def list_input_devices() -> list[tuple[int, str]]:
     """(index, name) for every input-capable audio device — for the menu-bar mic picker."""
     out = []
@@ -175,6 +178,7 @@ def capture_once(max_wait: float = 8.0, cfg: "ListenerConfig | None" = None) -> 
             except _q.Empty:
                 continue
             raw.append(block)
+            LEVEL["v"] = 0.55 * LEVEL["v"] + 0.45 * min(1.0, float(np.sqrt((block ** 2).mean())) * 12.0)  # for the orb
             vad.accept_waveform(np.clip(block * gain, -1.0, 1.0).astype(np.float32))  # gained -> VAD only
             if vad.is_speech_detected():
                 speech_seen = True
@@ -198,5 +202,6 @@ def capture_once(max_wait: float = 8.0, cfg: "ListenerConfig | None" = None) -> 
             elif speech_seen and raw:         # heard speech but no clean segment -> use the whole take
                 seg = np.concatenate(raw)
     finally:
+        LEVEL["v"] = 0.0
         stream.stop(); stream.close()
     return seg

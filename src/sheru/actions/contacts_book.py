@@ -45,6 +45,9 @@ def get(name: str) -> dict | None:
     if key in d:
         e = d[key]
         return {"name": e["name"], "kind": "phone", "handle": e.get("handle"), "address": e.get("address")}
+    for e in d.values():                          # resolve by an address override too ("message Madam" -> Crocodile)
+        if e.get("address") and e["address"].strip().lower() == key:
+            return {"name": e["name"], "kind": "phone", "handle": e.get("handle"), "address": e.get("address")}
     from rapidfuzz import fuzz
     best, score = None, 0.0
     for k, e in d.items():
