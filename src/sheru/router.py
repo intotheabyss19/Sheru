@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Callable
 
-from .actions import apps, files, location, music, system, weather, web
+from .actions import apps, browser, browser_agent, files, location, music, system, weather, web
 
 
 def _default_msg_app() -> str:
@@ -66,6 +66,15 @@ class Router:
         # local filesystem (no Claude needed): open a terminal in a dir, make folders/files
         (re.compile(r"^open\s+(?:a\s+|the\s+)?(?:terminal|ghostty|shell|command line|iterm)\s+(?:in|at|inside|here)\b\s*(.*)$"), "terminal_in"),
         (re.compile(r"^(?:make|create|new|touch|add)\s+(?:me\s+)?(?:a\s+|an\s+)?(?:new\s+)?((?:folder|directory|dir|file|text\s*file|txt\s*file|document|\.txt)\b.*)$"), "fs_make"),
+        # browser actions (Brave/piyush by default) — BEFORE the generic 'open' so 'open gmail' isn't an app-open
+        (re.compile(r"^(?:play|put on|start|search)\s+(.+?)\s+on\s+(?:you ?tube music|yt music)\b.*$"), "yt_music"),
+        (re.compile(r"^(?:play|put on|start)\s+(.+?)\s+on\s+(?:you ?tube|yt)\b.*$"), "youtube"),
+        (re.compile(r"^(?:you ?tube|yt)\s+(.+)$"), "youtube"),
+        (re.compile(r"^(?:play|put on|start)\s+(.+?)\s+(?:on|in)\s+(?:the\s+)?(?:browser|web|zen|brave)$"), "youtube"),
+        (re.compile(r"^(?:message|dm|text|write to)\s+(.+?)\s+on\s+linked ?in(?:\s+(?:that|saying|to say)\s+(.+))?$"), "linkedin"),
+        (re.compile(r"^(?:open|check|show me|go to)\s+(?:my\s+)?(?:g ?mail|email|inbox)\b.*$"), "gmail_open"),
+        (re.compile(r"^(?:use|switch to|open)\s+(brave|google chrome|chrome|zen|firefox)(?:\s+browser)?$"), "use_browser"),
+        (re.compile(r"^(?:use|switch to|go to|open)\s+(?:the\s+)?(.+?)(?:['’]s)?\s+profile\b.*$"), "profile"),
         (re.compile(r"^(?:open|launch|start|run)\s+(?:the\s+)?(.+?)(?:\s+(?:app|application|browser))?$"), "open"),
         (re.compile(r"^(?:quit|close|kill)\s+(?!all (?:my|the|your) )(?:the\s+)?(.+?)(?:\s+(?:app|application))?$"), "quit"),
         (re.compile(r"^(?:switch|go|jump)\s+to\s+(?:the\s+)?(.+?)\s+profile$"), "profile"),
@@ -152,7 +161,23 @@ class Router:
         if kind == "switch":
             return Result(apps.switch_to(g[0]))
         if kind == "profile":
-            return Result(web.switch_profile(g[0]))
+            return Result(browser.set_profile(g[0]))     # Brave profiles (piyush/moon/...); the automation browser
+        if kind == "use_browser":
+            return Result(browser.set_browser(g[0]))
+        if kind == "youtube":
+            return Result(browser_agent.play_youtube(next((x for x in g if x), "").strip()), followup=True)
+        if kind == "yt_music":
+            return Result(browser_agent.play_music(g[0].strip()), followup=True)
+        if kind == "gmail_open":
+            browser.launch("https://mail.google.com/")
+            return Result(f"Opening Gmail in {browser.describe()}.", followup=True)
+        if kind == "linkedin":
+            import urllib.parse as _u
+            who = g[0].strip(); msg = (g[1] or "").strip()
+            browser.launch("https://www.linkedin.com/search/results/people/?keywords=" + _u.quote(who))
+            pre = f"Draft to {who}: “{msg}”. " if msg else ""
+            return Result(pre + f"I've opened {who} on LinkedIn — auto-sending needs the one-time browser setup, "
+                          "then I'll draft and send with your confirmation.", followup=True)
         if kind == "engine":
             return Result(web.set_search_engine(g[0]))
         if kind == "images":

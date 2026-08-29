@@ -17,6 +17,7 @@ dependencies = [
     "mlx-whisper>=0.4.3",
     "numpy>=2.5.2",
     "parakeet-mlx>=0.5.2",
+    "playwright>=1.62.0",
     "pyobjc-framework-applicationservices>=12.2.2",
     "pyobjc-framework-avfoundation>=12.2.2",
     "pyobjc-framework-cocoa>=12.2.2",
