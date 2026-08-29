@@ -4,6 +4,7 @@ Optional neural backends (config.TTS_BACKEND): "kokoro" (local, English) and "sa
 real Hindi + 10 other Indian languages). Both degrade to AVSpeech on any failure."""
 from __future__ import annotations
 
+import queue
 import subprocess
 import threading
 
@@ -44,7 +45,10 @@ class Speaker:
         self._kokoro = None          # lazily-loaded Kokoro-82M model (when config.TTS_BACKEND == "kokoro")
         self._sarvam = None          # lazily-built SarvamAI client (when config.TTS_BACKEND == "sarvam")
         self._speak_started = 0.0
-        self._max_speak_s = 30.0     # guard: never report 'speaking' longer than this (stuck-synth safety)
+        self._max_speak_s = 30.0     # guard: never report 'speaking' longer than this PER utterance (stuck-synth)
+        self._q: queue.Queue = queue.Queue()   # sentences to speak IN ORDER — a streamed reply no longer cuts itself off
+        self._worker: threading.Thread | None = None
+        self._current: str | None = None       # utterance being spoken right now (None between/idle)
 
     @property
     def voice_name(self) -> str:
@@ -55,33 +59,69 @@ class Speaker:
         return self._voice.name() if self._voice else "say"
 
     def speak(self, text: str, wait: bool = False) -> None:
+        """Enqueue text to be spoken. A streamed reply arrives as many speak() calls; queuing plays them in
+        order instead of each one interrupting the last (which left only the final fragment audible)."""
         text = text.strip()
         if not text:
             return
-        with self._lock:
-            self.stop()
-            import time as _t
-            self._speak_started = _t.monotonic()
-            backend = config.TTS_BACKEND
-            if backend == "kokoro":
-                spoke = self._speak_kokoro(text)
-            elif backend == "sarvam":
-                spoke = self._speak_sarvam(text)
-            else:
-                spoke = False
-            if spoke:
-                pass                                  # neural backends play via afplay (self._proc); stop/wait/speaking handle it
-            elif self._synth is not None:
-                u = AVSpeechUtterance.speechUtteranceWithString_(text)
-                if self._voice is not None:
-                    u.setVoice_(self._voice)
-                u.setRate_(config.TTS_RATE)
-                u.setPitchMultiplier_(config.TTS_PITCH)
-                self._synth.speakUtterance_(u)
-            else:
-                self._proc = subprocess.Popen(["say", text])
+        self._ensure_worker()
+        self._q.put(text)
         if wait:
             self.wait()
+
+    def _ensure_worker(self) -> None:
+        with self._lock:
+            if self._worker is None or not self._worker.is_alive():
+                self._worker = threading.Thread(target=self._run, name="sheru-speaker", daemon=True)
+                self._worker.start()
+
+    def _run(self) -> None:
+        import time as _t
+        while True:
+            try:
+                text = self._q.get(timeout=1.0)
+            except queue.Empty:
+                continue
+            self._current = text
+            self._speak_started = _t.monotonic()
+            try:
+                self._play_one(text)          # synthesize + play + BLOCK until this utterance finishes
+            except Exception:
+                pass
+            self._current = None
+
+    def _play_one(self, text: str) -> None:
+        backend = config.TTS_BACKEND
+        with self._lock:
+            spoke = (self._speak_kokoro(text) if backend == "kokoro" else
+                     self._speak_sarvam(text) if backend == "sarvam" else False)
+            if not spoke:                             # neural failed/off -> AVSpeech, else `say`
+                if self._synth is not None:
+                    u = AVSpeechUtterance.speechUtteranceWithString_(text)
+                    if self._voice is not None:
+                        u.setVoice_(self._voice)
+                    u.setRate_(config.TTS_RATE)
+                    u.setPitchMultiplier_(config.TTS_PITCH)
+                    self._synth.speakUtterance_(u)
+                else:
+                    self._proc = subprocess.Popen(["say", text])
+        self._wait_current()                         # don't start the next sentence until this one is done
+
+    def _wait_current(self) -> None:
+        import time as _t
+        p = self._proc
+        if p is not None:                            # afplay/say subprocess (Kokoro/Sarvam/say)
+            try:
+                p.wait()
+            except Exception:
+                pass
+            return
+        if self._synth is not None:                  # AVSpeech
+            t0 = _t.monotonic()
+            while not self._synth.isSpeaking() and _t.monotonic() - t0 < 1.0:
+                _t.sleep(0.02)
+            while self._synth.isSpeaking():
+                _t.sleep(0.05)
 
     def _ensure_kokoro(self):
         if self._kokoro is None:
@@ -145,29 +185,38 @@ class Speaker:
             return False
 
     def wait(self) -> None:
-        if self._proc is not None:                    # Kokoro/say path (afplay/say subprocess)
-            self._proc.wait()
-            return
-        if self._synth is not None:
-            import time
-            t0 = time.monotonic()
-            while not self._synth.isSpeaking() and time.monotonic() - t0 < 1.0:
-                time.sleep(0.02)                      # speech starts asynchronously
-            while self._synth.isSpeaking():
-                time.sleep(0.05)
+        """Block until the whole queue has been spoken (all streamed sentences), not just the current one."""
+        import time as _t
+        while (not self._q.empty()) or self._current is not None or self._proc_alive() or self._synth_speaking():
+            _t.sleep(0.05)
 
     def stop(self) -> None:
-        if self._synth is not None and self._synth.isSpeaking():
-            self._synth.stopSpeakingAtBoundary_(AVSpeechBoundaryImmediate)
-        if self._proc is not None and self._proc.poll() is None:
-            self._proc.terminate()
-        self._proc = None
+        """Interrupt: drop every queued sentence and kill whatever is playing now."""
+        try:
+            while True:
+                self._q.get_nowait()
+        except queue.Empty:
+            pass
+        with self._lock:
+            if self._synth is not None and self._synth.isSpeaking():
+                self._synth.stopSpeakingAtBoundary_(AVSpeechBoundaryImmediate)
+            if self._proc is not None and self._proc.poll() is None:
+                self._proc.terminate()
+            self._proc = None
+        self._current = None
+
+    def _proc_alive(self) -> bool:
+        return self._proc is not None and self._proc.poll() is None
+
+    def _synth_speaking(self) -> bool:
+        return bool(self._synth.isSpeaking()) if self._synth is not None else False
 
     @property
     def speaking(self) -> bool:
         import time as _t
-        if self._speak_started and _t.monotonic() - self._speak_started > self._max_speak_s:
-            return False     # stuck-synth guard: don't let a hung voice mute the mic forever
-        av = bool(self._synth.isSpeaking()) if self._synth is not None else False
-        proc = self._proc is not None and self._proc.poll() is None
-        return av or proc     # AVSpeech OR the afplay/say subprocess (Kokoro path)
+        # stuck-synth guard applies PER utterance and only when nothing is queued behind it — a long multi-
+        # sentence answer keeps 'speaking' True the whole time (each sentence resets _speak_started).
+        if (self._speak_started and _t.monotonic() - self._speak_started > self._max_speak_s
+                and self._q.empty() and self._current is None):
+            return False
+        return (not self._q.empty()) or self._current is not None or self._proc_alive() or self._synth_speaking()
