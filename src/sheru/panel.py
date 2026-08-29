@@ -22,7 +22,7 @@ from AppKit import (
     NSFocusRingTypeNone, NSBoxSeparator,
     NSViewWidthSizable, NSViewHeightSizable,
 )
-from Foundation import NSMakeRect, NSObject
+from Foundation import NSMakeRect, NSMakeSize, NSObject
 from PyObjCTools import AppHelper
 
 # NSVisualEffect constants (not always exported by name in pyobjc)
@@ -140,6 +140,14 @@ class TypePanel(NSObject):
         tv.setFont_(NSFont.systemFontOfSize_(16))
         tv.setTextColor_(NSColor.labelColor())
         tv.setTextContainerInset_((0, 4))
+        tv.setVerticallyResizable_(True)                  # grow with content so the scroll view can reach ALL of it
+        tv.setHorizontallyResizable_(False)
+        tv.setMinSize_(NSMakeSize(0.0, scroll_h))
+        tv.setMaxSize_(NSMakeSize(1.0e7, 1.0e7))
+        tv.setAutoresizingMask_(NSViewWidthSizable)
+        tc = tv.textContainer()
+        tc.setContainerSize_(NSMakeSize(W - 2 * PAD, 1.0e7))
+        tc.setWidthTracksTextView_(True)
         scroll.setDocumentView_(tv)
         vev.addSubview_(scroll)
         self._out = tv
