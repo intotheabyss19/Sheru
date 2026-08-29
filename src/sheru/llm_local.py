@@ -32,8 +32,9 @@ _TOOL_RE = re.compile(r"<tool_call>\s*(\{.*?\})\s*</tool_call>", re.S)
 
 
 class LocalLLM:
-    def __init__(self, model_id: str = config.LOCAL_LLM) -> None:
+    def __init__(self, model_id: str = config.LOCAL_LLM, adapter_path: str | None = None) -> None:
         self.model_id = model_id
+        self.adapter_path = adapter_path if adapter_path is not None else config.LOCAL_ADAPTER
         self._lock = threading.Lock()
         self._model = self._tok = None
 
@@ -42,7 +43,8 @@ class LocalLLM:
         from . import mlx_pool
         with self._lock:
             if self._model is None:
-                self._model, self._tok = mlx_pool.run(load, self.model_id)
+                kw = {"adapter_path": self.adapter_path} if self.adapter_path else {}
+                self._model, self._tok = mlx_pool.run(load, self.model_id, **kw)
         return self
 
     def decide(self, text: str, history: list[dict] | None = None, extra_system: str = "") -> dict:

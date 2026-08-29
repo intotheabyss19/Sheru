@@ -20,17 +20,21 @@ DATA="data/finetune"
 ADAPTER="data/finetune/adapter"
 mkdir -p "$ADAPTER"
 
-echo "Fine-tuning $MODEL on $DATA  (iters=${ITERS:-300}, batch=${BATCH:-1}, layers=${LAYERS:-4}, seq=${SEQ:-1024})"
+echo "Fine-tuning $MODEL on $DATA  (iters=${ITERS:-400}, batch=${BATCH:-1}, layers=${LAYERS:-8}, seq=${SEQ:-2048})"
 uv run python -m mlx_lm.lora \
   --model "$MODEL" \
   --train \
   --data "$DATA" \
-  --iters "${ITERS:-300}" \
+  --iters "${ITERS:-400}" \
   --batch-size "${BATCH:-1}" \
-  --num-layers "${LAYERS:-4}" \
-  --max-seq-length "${SEQ:-1024}" \
+  --num-layers "${LAYERS:-8}" \
+  --max-seq-length "${SEQ:-2048}" \
   --grad-checkpoint \
   --learning-rate 1e-4 \
+  --steps-per-report 20 \
+  --steps-per-eval 50 \
+  --val-batches 12 \
+  --save-every 100 \
   --adapter-path "$ADAPTER"
 
 echo
