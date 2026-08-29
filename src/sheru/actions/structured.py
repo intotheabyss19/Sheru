@@ -177,10 +177,59 @@ def news(query: str) -> str | None:
     return lead + " ".join(f"{i}. {h}." for i, h in enumerate(heads, 1))
 
 
+# ── wikipedia (facts about people/places/things) ──────────────────────────────────────────────────
+_WIKI_Q = re.compile(r"^\s*(?:who|what)(?:'?s| is| are| was| were)\s+(.+?)\??$|"
+                     r"^\s*tell me about\s+(.+?)\??$|^\s*(.+?)\s+wikipedia\s*$", re.I)
+_WIKI_SKIP = re.compile(r"\b(weather|temperature|news|price|stock|rate|score|today|now|latest|happening|"
+                        r"time|date|going to|worth|cost)\b", re.I)
+
+
+def wiki(query: str) -> str | None:
+    """'who is Ada Lovelace', 'what is a black hole', 'tell me about the Eiffel Tower' -> a crisp Wikipedia summary."""
+    if _WIKI_SKIP.search(query):                           # live/current or already handled above — not encyclopedic
+        return None
+    m = _WIKI_Q.match(query.strip())
+    if not m:
+        return None
+    topic = next((g for g in m.groups() if g), "").strip()
+    topic = re.sub(r"^(a|an|the)\s+", "", topic, flags=re.I).strip()
+    if len(topic) < 2 or len(topic.split()) > 8:
+        return None
+    words = set(re.findall(r"[a-z]+", topic.lower()))
+    if re.search(r"\d", topic) and (words & set(_CCY)):    # a currency/amount query — fx's job, never Wikipedia
+        return None
+    import json
+    # resolve the best title first (handles redirects, casing, 'who is' phrasings)
+    srch = _get("https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&srlimit=1&srsearch="
+                + urllib.parse.quote(topic))
+    title = topic
+    if srch:
+        try:
+            hits = json.loads(srch)["query"]["search"]
+            if hits:
+                title = hits[0]["title"]
+        except Exception:
+            pass
+    data = _get("https://en.wikipedia.org/api/rest_v1/page/summary/" + urllib.parse.quote(title.replace(" ", "_")))
+    if not data:
+        return None
+    try:
+        d = json.loads(data)
+    except Exception:
+        return None
+    if d.get("type", "").endswith("disambiguation"):
+        return None
+    extract = (d.get("extract") or "").strip()
+    if not extract:
+        return None
+    sents = re.split(r"(?<=[.!?])\s+", extract)             # keep it to ~2 spoken sentences
+    return " ".join(sents[:2]).strip()
+
+
 # ── dispatcher ───────────────────────────────────────────────────────────────────────────────────
 def answer(query: str) -> str | None:
     """Try each structured answerer; return the first precise hit, or None to fall back to scrape+summarize."""
-    for fn in (fx, weather, news):
+    for fn in (fx, weather, news, wiki):
         try:
             r = fn(query)
         except Exception:
