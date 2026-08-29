@@ -8,9 +8,22 @@ from __future__ import annotations
 
 import re
 import subprocess
+import time
 from pathlib import Path
 
 HOME = Path.home()
+
+# spawn-guard: identical launches within a few seconds are almost always a mis-fire / mic echo, not intent —
+# without this, follow-up listening + a room echo can open a new terminal window over and over.
+_last_spawn: dict[str, float] = {}
+
+
+def _too_soon(key: str, secs: float = 6.0) -> bool:
+    now = time.monotonic()
+    if now - _last_spawn.get(key, 0.0) < secs:
+        return True
+    _last_spawn[key] = now
+    return False
 
 # spoken location word -> base directory (default: home)
 _BASES = {
@@ -82,6 +95,8 @@ def make(remainder: str) -> str:
 def open_terminal(where: str | None) -> str:
     """Open a Ghostty terminal window already cd'd into a directory under home."""
     base = _base_for(where)
+    if _too_soon(f"term:{base}"):
+        return f"Already opening a terminal in {base.name or 'home'}."
     subprocess.Popen(["open", "-na", "Ghostty", "--args",
                       "--window-save-state=never", f"--working-directory={base}"])
     return f"Opened a terminal in {base.name or 'your home folder'}."
@@ -122,6 +137,8 @@ def open_terminal_claude(where: str | None) -> str:
     base = resolve_dir_smart(where)
     if base is None:
         return "__ASK_DIR__"
+    if _too_soon(f"claude:{base}"):
+        return f"A Claude session is already opening in {base.name}."
     env = f"CLAUDE_CONFIG_DIR={shlex.quote(config.CLAUDE_CONFIG_DIR)} " if config.CLAUDE_CONFIG_DIR else ""
     cmd = f"cd {shlex.quote(str(base))} && {env}exec claude"     # land in the dir, then hand off to interactive claude
     subprocess.Popen(["open", "-na", "Ghostty", "--args", "--window-save-state=never",

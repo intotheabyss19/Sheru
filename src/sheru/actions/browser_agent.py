@@ -9,9 +9,26 @@ auto-send without a spoken/typed "yes".
 from __future__ import annotations
 
 import re
+import subprocess
 import urllib.parse
 
 from . import browser
+
+
+def _press_play_soon(delay: float = 4.0) -> None:
+    """Best-effort: after the watch page loads, bring the browser front and press 'k' (YouTube's play/pause) so
+    the video actually STARTS — Chromium blocks silent autoplay until a user gesture. Needs Accessibility for
+    System Events; if that's not granted it fails quietly and the tab is still open, just paused."""
+    app = browser.current().get("browser", "Brave Browser")
+    script = (f'delay {delay}\n'
+              f'tell application "{app}" to activate\n'
+              f'delay 0.6\n'
+              f'tell application "System Events" to keystroke "k"')
+    try:
+        subprocess.Popen(["osascript", "-e", script],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
 
 
 def _first_youtube_id(query: str, music: bool = False) -> str | None:
