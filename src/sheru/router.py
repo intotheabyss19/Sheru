@@ -36,6 +36,7 @@ class Result:
     draft: dict | None = None     # {recipient, gist, app} -> app starts a draft/confirm flow
     resolve_song: str | None = None  # query the app should resolve via Claude, then play
     played: str | None = None        # the song query just played (so "no, wrong song" can re-resolve)
+    feedback: str | None = None      # explicit good/bad rating on the PREVIOUS action (judges Sheru's workings)
 
 
 @dataclass
@@ -54,6 +55,8 @@ class Router:
         (re.compile(r"^(?:stop|turn off|disable|pause)\s+recording\b.*|^stop saving\b.*"), "rec_off"),
         (re.compile(r"^(?:start|turn on|enable|resume)\s+recording\b.*"), "rec_on"),
         (re.compile(r"^(?:stop|cancel|never ?mind|shut up|quiet|enough)\b|^that'?s enough\b|^okay,? that'?s enough\b"), "stop"),
+        (re.compile(r"^(?:that (?:was|is)\s+|you (?:did|were)\s+)?(?:very |really |so )?(good|great|perfect|nice|excellent|awesome|well done|correct)\b\.?$"), "feedback_good"),
+        (re.compile(r"^(?:that (?:was|is)\s+|you (?:did|were)\s+)?(?:very |really |so )?(bad|wrong|terrible|awful|nope|useless|not good)\b\.?$"), "feedback_bad"),
         (re.compile(r"^(?:set ?up|configure|connect|run setup|start setup)(?:\s+(?:my\s+)?(?:spotify|permissions?|access|sheru|everything|you))?\b.*$"), "setup"),
 
         (re.compile(r"^(?:go to|open|visit)\s+(?:https?://)?((?:[\w-]+\.)+[a-z]{2,}(?:/\S*)?)$"), "url"),
@@ -138,6 +141,12 @@ class Router:
         g = m.groups()
         if kind == "stop":
             return Result("")
+        if kind == "feedback_good":
+            strong = bool(re.search(r"\bvery\b|\bperfect\b|\bexcellent\b|\bawesome\b", m.group(0)))
+            return Result("Awesome, thanks!" if strong else "Thanks!", feedback="positive-strong" if strong else "positive")
+        if kind == "feedback_bad":
+            strong = bool(re.search(r"\bvery\b|\bterrible\b|\bawful\b|\buseless\b", m.group(0)))
+            return Result("Sorry about that — I'll learn from it.", feedback="negative-strong" if strong else "negative")
         if kind == "help":
             return Result("I can open apps, search the web and summarize, play music, set timers and reminders, "
                           "draft and send messages, remember things, and hand harder tasks to Claude. "

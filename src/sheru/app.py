@@ -79,6 +79,8 @@ class Sheru:
             sink("Cancelled.")
             return "Cancelled."
         res = self.router.route(text)
+        if getattr(res, "feedback", None):
+            self.journal.label_last(res.feedback, note="explicit-rating")   # rate the PREVIOUS action before logging this turn
         self.journal.record(utterance=text, tier=res.tier, tool=getattr(res, "tool", None),
                             args=getattr(res, "args", None), speech=res.speech,
                             handoff=res.handoff, ts=time.time())
@@ -99,6 +101,13 @@ class Sheru:
                 sink(res.speech)
             self._delegate(res.handoff, sink, user_text=text)   # records the turn + resumes/injects conversation context
             return res.speech
+        if (res.tool and res.tool not in ("feedback_good", "feedback_bad", "stop", "help", "status",
+                                          "remember", "set_reply_lang", "set_voice")
+                and self._is_voice_sink(sink) and res.speech and not res.handoff):
+            self._act_n = getattr(self, "_act_n", 0) + 1     # occasionally ask for a rating (good/bad -> journal)
+            if self._act_n % 4 == 0:
+                res.speech = res.speech + " How did I do?"
+                res.followup = True
         if res.speech:
             sink(res.speech)
         if res.followup and self._is_voice_sink(sink):
