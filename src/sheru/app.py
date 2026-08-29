@@ -40,6 +40,7 @@ class Sheru:
         self.listener: Listener | None = None
         self.status = "starting"
         self.followup_until = 0.0
+        self._search_busy = False    # True while a local web-search+summarize thread runs — gates the mic like Claude
         self.claude_cooldown_until = 0.0
         self._last_claude_ts = 0.0   # when Claude last answered; a recent one -> resume the same session (continued conversation keeps context)
         self.pending = None          # a drafted action awaiting confirm/rephrase/cancel
@@ -307,6 +308,7 @@ class Sheru:
         try:
             self._ensure_orb()
             self.orb.show()              # the Siri-style orb IS the listening indicator now
+            self.orb.set_state("local")  # each session starts in the local (orange) colour
             self._start_orb_driver()
         except Exception as e:
             log.error("orb failed (%s) — showing the panel instead", e)
@@ -361,10 +363,10 @@ class Sheru:
                 if self.panel is not None:
                     self.panel.set_status("🔊 speaking…")
                 t_end = time.monotonic() + 175
-                while (self.claude.busy or self.speaker.speaking) and time.monotonic() < t_end:
+                while (self.claude.busy or self.speaker.speaking or self._search_busy) and time.monotonic() < t_end:
                     time.sleep(0.1)
                 time.sleep(0.6)                            # let a just-arrived FINAL sentence begin playing…
-                while (self.claude.busy or self.speaker.speaking) and time.monotonic() < t_end:
+                while (self.claude.busy or self.speaker.speaking or self._search_busy) and time.monotonic() < t_end:
                     time.sleep(0.1)                        # …then wait that out too
                 time.sleep(0.35)                           # echo guard: let the audio tail clear the mic buffer
                 # re-listen only when a follow-up is expected: a draft awaiting confirm, or Sheru just answered
@@ -586,21 +588,25 @@ class Sheru:
         from .actions import search_local
         if user_text is not None:
             self._record_turn(user_text, None)
+        self._search_busy = True                 # gate the mic while we fetch+summarize (else it records the answer)
 
         def _go():
-            ans = None
             try:
-                ans = search_local.search_and_summarize(query, self.llm)
-            except Exception as e:
-                log.warning("local search failed: %s", e)
-            if ans:
-                log.info("answered LOCALLY via web-search + summarize")
-                sink(ans)
-                self.router.history.append({"role": "assistant", "content": ans[:800]})
-                self.allow_followup(12)
-            else:
-                log.info("local search couldn't answer -> escalating to Claude")
-                self._delegate(query, sink)      # genuine fallback (rare)
+                ans = None
+                try:
+                    ans = search_local.search_and_summarize(query, self.llm)
+                except Exception as e:
+                    log.warning("local search failed: %s", e)
+                if ans:
+                    log.info("answered LOCALLY via web-search + summarize")
+                    sink(ans)
+                    self.router.history.append({"role": "assistant", "content": ans[:800]})
+                    self.allow_followup(12)
+                else:
+                    log.info("local search couldn't answer -> escalating to Claude")
+                    self._delegate(query, sink)  # claude.busy is set synchronously -> the gate switches to it
+            finally:
+                self._search_busy = False
         threading.Thread(target=_go, name="sheru-search", daemon=True).start()
 
     def allow_followup(self, seconds: float = 6.0) -> None:

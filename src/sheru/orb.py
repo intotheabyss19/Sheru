@@ -181,7 +181,7 @@ def _dot_image(d: int = 48):
     cs = CGColorSpaceCreateDeviceRGB()
     ctx = CGBitmapContextCreate(None, d, d, 8, d * 4, cs, kCGImageAlphaPremultipliedLast)
     grad = CGGradientCreateWithColorComponents(
-        cs, [1.0, 0.93, 0.70, 1.0,  1.0, 0.55, 0.12, 0.0], [0.0, 1.0], 2)   # warm core -> transparent
+        cs, [1.0, 1.0, 1.0, 1.0,  1.0, 1.0, 1.0, 0.0], [0.0, 1.0], 2)   # NEUTRAL white -> transparent so cell.color fully tints it
     c = d / 2.0
     CGContextDrawRadialGradient(ctx, grad, (c, c), 0.0, (c, c), c, kCGGradientDrawsAfterEndLocation)
     return CGBitmapContextCreateImage(ctx)
