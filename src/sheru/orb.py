@@ -25,7 +25,8 @@ from Foundation import NSMakeRect, NSObject, NSPoint
 from PyObjCTools import AppHelper
 from Quartz import CAGradientLayer, CATransaction, CATransform3DMakeScale
 
-ORB = 100                    # window + orb diameter (px)
+WIN, ORB = 200, 50           # WIN = big transparent window (room for the glow + voice-swell, so it never clips);
+#                              ORB = the orb disc diameter
 _amp = {"v": 0.0}            # shared live mic amplitude 0..1 (smoothed), written by the sampler thread
 
 
@@ -36,8 +37,9 @@ class _OrbView(NSView):
             return None
         self._on_click = on_click
         self.setWantsLayer_(True)
-        r = ORB * 0.34
-        cx, cy = ORB / 2, ORB / 2
+        self.layer().setMasksToBounds_(False)                 # never clip the glow to the view rect
+        r = ORB / 2
+        cx, cy = WIN / 2, WIN / 2                             # centre the orb in the roomy window
         # the glowing orb: a radial gradient disc with a soft outer glow
         orb = CAGradientLayer.layer()
         orb.setType_("radial")                                # kCAGradientLayerRadial
@@ -96,22 +98,23 @@ class ListeningOrb(NSObject):
     def _build(self):
         style = NSWindowStyleMaskBorderless | NSWindowStyleMaskNonactivatingPanel
         p = NSPanel.alloc().initWithContentRect_styleMask_backing_defer_(
-            NSMakeRect(0, 0, ORB, ORB), style, NSBackingStoreBuffered, False)
+            NSMakeRect(0, 0, WIN, WIN), style, NSBackingStoreBuffered, False)
         p.setLevel_(NSFloatingWindowLevel)
         p.setCollectionBehavior_(NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBehaviorStationary)
         p.setOpaque_(False)
         p.setBackgroundColor_(NSColor.clearColor())
         p.setHasShadow_(False)
         p.setIgnoresMouseEvents_(False)
-        view = _OrbView.alloc().initWithFrame_click_(NSMakeRect(0, 0, ORB, ORB), self._on_click)
+        view = _OrbView.alloc().initWithFrame_click_(NSMakeRect(0, 0, WIN, WIN), self._on_click)
         p.setContentView_(view)
         self._view = view
-        # top-right, just under the menu bar (where Siri's orb sits); visibleFrame excludes the menu bar + dock
+        # place the ORB (centred in the roomy window) near the top-right corner, under the menu bar; the extra
+        # window padding around it stays transparent so the glow/swell never hits a visible edge
         from AppKit import NSScreen
         vf = NSScreen.mainScreen().visibleFrame()
-        m = 16
-        p.setFrameOrigin_((vf.origin.x + vf.size.width - ORB - m,
-                           vf.origin.y + vf.size.height - ORB - m))
+        ocx = vf.origin.x + vf.size.width - 78            # orb centre ~78px from the right (Siri corner)
+        ocy = vf.origin.y + vf.size.height - 88            # and ~88px below the menu bar
+        p.setFrameOrigin_((ocx - WIN / 2, ocy - WIN / 2))
         self._panel = p
 
     @objc.python_method
