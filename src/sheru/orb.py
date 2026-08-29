@@ -25,8 +25,8 @@ from Foundation import NSMakeRect, NSObject, NSPoint
 from PyObjCTools import AppHelper
 from Quartz import CAGradientLayer, CATransaction, CATransform3DMakeScale
 
-WIN, ORB = 200, 50           # WIN = big transparent window (room for the glow + voice-swell, so it never clips);
-#                              ORB = the orb disc diameter
+WIN, ORB = 140, 50           # WIN = transparent window sized to sit flush in the corner (room for the glow +
+#                              swell, no clipping, no menu-bar overlap); ORB = the orb disc diameter
 _amp = {"v": 0.0}            # shared live mic amplitude 0..1 (smoothed), written by the sampler thread
 
 
@@ -67,7 +67,7 @@ class _OrbView(NSView):
         # single source of scale (no CA-animation override, which was hiding the voice): a gentle idle breathe
         # PLUS live amplitude, recomputed every frame so it actually reacts to your voice.
         idle = 0.05 * (0.5 + 0.5 * math.sin(time.monotonic() * 3.0))
-        s = 1.0 + idle + 0.7 * max(0.0, min(1.0, v))
+        s = 1.0 + idle + 0.55 * max(0.0, min(1.0, v))         # swell kept within the flush corner window
         CATransaction.begin()
         CATransaction.setDisableActions_(True)
         self._orb.setTransform_(_scale(s))
@@ -112,9 +112,11 @@ class ListeningOrb(NSObject):
         # window padding around it stays transparent so the glow/swell never hits a visible edge
         from AppKit import NSScreen
         vf = NSScreen.mainScreen().visibleFrame()
-        ocx = vf.origin.x + vf.size.width - 78            # orb centre ~78px from the right (Siri corner)
-        ocy = vf.origin.y + vf.size.height - 88            # and ~88px below the menu bar
-        p.setFrameOrigin_((ocx - WIN / 2, ocy - WIN / 2))
+        # window FLUSH in the top-right of the visible area (top under the menu bar, right at the edge). The orb
+        # is centred, so its padding is EQUAL on top and right, and the window never overlaps the menu bar — so
+        # macOS can't shove it down (which was inflating the top gap vs the right).
+        p.setFrameOrigin_((vf.origin.x + vf.size.width - WIN,
+                           vf.origin.y + vf.size.height - WIN))
         self._panel = p
 
     @objc.python_method
