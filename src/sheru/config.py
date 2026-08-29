@@ -51,6 +51,10 @@ STT_BACKEND = os.environ.get("SHERU_STT") or _P.get("stt_backend") or "parakeet"
 # (Parakeet-v3 and Whisper both hallucinate Russian/other Cyrillic on Hindi speech or noise — the clamp kills that).
 STT_LANG = os.environ.get("SHERU_STT_LANG") or _P.get("stt_lang") or None
 
+# Microphone input device: a device index (as a string) or a name substring; None/"" = AUTO-pick the built-in
+# MacBook mic (best voice isolation + noise rejection). Set profile 'mic_device' (via the menu-bar picker) or SHERU_MIC.
+MIC_DEVICE = os.environ.get("SHERU_MIC") or _P.get("mic_device") or None
+
 
 def _claude_config_dir() -> str | None:
     """Which Claude login Tier-2 (`claude -p`) uses. The GUI/login-item launch inherits an EMPTY
@@ -145,6 +149,14 @@ def set_reply_lang(lang: str) -> None:
     global REPLY_LANG
     REPLY_LANG = lang
     update_profile("reply_lang", lang)
+
+
+def set_mic(device) -> None:
+    """Choose the input device (index or name substring; None = auto built-in) and persist it. Takes effect on the
+    next listen (the push-to-talk mic opens per-call; the always-on Listener re-reads it when restarted)."""
+    global MIC_DEVICE
+    MIC_DEVICE = device
+    update_profile("mic_device", device)
 
 
 def sarvam_lang_for(text: str) -> str:

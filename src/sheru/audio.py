@@ -106,6 +106,36 @@ class Listener:
                 continue
 
 
+def list_input_devices() -> list[tuple[int, str]]:
+    """(index, name) for every input-capable audio device — for the menu-bar mic picker."""
+    out = []
+    try:
+        for i, d in enumerate(sd.query_devices()):
+            if d.get("max_input_channels", 0) > 0:
+                out.append((i, d["name"]))
+    except Exception:
+        pass
+    return out
+
+
+def preferred_device():
+    """Which input device to open: the user's saved choice (config.MIC_DEVICE = index or name substring), else
+    the built-in MacBook mic (best voice isolation / noise rejection), else the system default (None)."""
+    pref = config.MIC_DEVICE
+    devs = list_input_devices()
+    if pref not in (None, ""):
+        try:
+            return int(pref)                                   # an explicit device index
+        except (ValueError, TypeError):
+            for i, name in devs:
+                if str(pref).lower() in name.lower():
+                    return i
+    for i, name in devs:                                       # auto: prefer the built-in mic
+        if any(k in name.lower() for k in ("macbook", "built-in", "built in", "internal")):
+            return i
+    return None
+
+
 def capture_once(max_wait: float = 8.0, cfg: "ListenerConfig | None" = None) -> "np.ndarray | None":
     """Open the mic, return the FIRST complete speech segment (float32 @16k) or None on timeout, then close
     the mic. Push-to-talk: the mic (and its indicator) is live only for this call."""
@@ -131,8 +161,9 @@ def capture_once(max_wait: float = 8.0, cfg: "ListenerConfig | None" = None) -> 
 
     import os
     gain = float(os.environ.get("SHERU_MIC_GAIN", "4.0"))   # boosts ONLY the VAD's copy, not the STT audio
+    dev = cfg.device if cfg.device is not None else preferred_device()   # honour the chosen mic (was ignored -> built-in)
     stream = sd.InputStream(samplerate=config.SAMPLE_RATE, channels=1, dtype="float32",
-                            blocksize=BLOCK, callback=_cb)
+                            blocksize=BLOCK, device=dev, callback=_cb)
     stream.start()
     t0 = _t.monotonic(); seg = None
     raw: list = []          # keep the clean, un-gained audio for the STT

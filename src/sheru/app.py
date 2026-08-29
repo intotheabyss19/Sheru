@@ -342,11 +342,19 @@ class Sheru:
                     if self.panel is not None:
                         self.panel.push_user(cmd)          # show what Sheru HEARD in the chat (so you catch STT errors)
                     self.handle_text(cmd, sink=self._say_both)
-                # if a Claude handoff is in flight, wait it out so the answer + follow-up window arrive first
-                t_end = time.monotonic() + 155
-                while self.claude.busy and time.monotonic() < t_end:
+                # GATE: don't re-open the mic until Sheru is COMPLETELY done — Claude finished AND every streamed
+                # sentence has finished playing — else it records its own voice, which starts a new turn that cuts
+                # the reply off. claude.busy stays True through a 'speak -> search -> speak more' answer, so this
+                # also keeps the mic shut during the mid-reply pause.
+                if self.panel is not None:
+                    self.panel.set_status("🔊 speaking…")
+                t_end = time.monotonic() + 175
+                while (self.claude.busy or self.speaker.speaking) and time.monotonic() < t_end:
                     time.sleep(0.1)
-                self.speaker.wait()                        # let Sheru finish talking before the mic re-opens
+                time.sleep(0.6)                            # let a just-arrived FINAL sentence begin playing…
+                while (self.claude.busy or self.speaker.speaking) and time.monotonic() < t_end:
+                    time.sleep(0.1)                        # …then wait that out too
+                time.sleep(0.35)                           # echo guard: let the audio tail clear the mic buffer
                 # re-listen only when a follow-up is expected: a draft awaiting confirm, or Sheru just answered
                 if self.pending is None and time.monotonic() >= self.followup_until:
                     break
@@ -610,7 +618,9 @@ class Sheru:
 
     def start_voice(self) -> None:
         self._mic_selftest()
-        self.listener = Listener(is_busy=lambda: self.speaker.speaking).start()
+        from .audio import ListenerConfig, preferred_device
+        self.listener = Listener(ListenerConfig(device=preferred_device()),
+                                 is_busy=lambda: self.speaker.speaking).start()
         threading.Thread(target=self._voice_loop, name="sheru-main", daemon=True).start()
         self.status = "listening"
 
@@ -711,7 +721,19 @@ def run_menubar(app: Sheru) -> None:
             self._voice_local.state = 1 if config.TTS_BACKEND != "sarvam" else 0
             voice = rumps.MenuItem("🔊 Voice")
             voice.add(self._voice_sarvam); voice.add(self._voice_local)
-            self.menu = ["🎙 Talk to Sheru", "Type to Sheru", voice, "Setup / Permissions…", "🎵 Set up Spotify…",
+            # microphone picker — the built-in mic is auto-preferred (best noise isolation); switch here
+            from .audio import list_input_devices, preferred_device
+            cur = preferred_device()
+            self._mic_items = {}
+            mic = rumps.MenuItem("🎙 Microphone")
+            auto = rumps.MenuItem("Auto (built-in)", callback=lambda _: self._set_mic(None))
+            auto.state = 1 if config.MIC_DEVICE in (None, "") else 0
+            mic.add(auto); self._mic_items["auto"] = auto
+            for idx, name in list_input_devices():
+                it = rumps.MenuItem(name, callback=lambda s, i=idx: self._set_mic(i))
+                it.state = 1 if (config.MIC_DEVICE not in (None, "") and idx == cur) else 0
+                mic.add(it); self._mic_items[idx] = it
+            self.menu = ["🎙 Talk to Sheru", "Type to Sheru", voice, mic, "Setup / Permissions…", "🎵 Set up Spotify…",
                          "Mute", None, self._alarm_item, self._stop_item, None, "Quit Sheru"]
 
         def _set_voice(self, backend):
@@ -719,6 +741,21 @@ def run_menubar(app: Sheru) -> None:
             config.set_tts(backend)
             self._voice_sarvam.state = 1 if backend == "sarvam" else 0
             self._voice_local.state = 1 if backend != "sarvam" else 0
+
+        def _set_mic(self, device):
+            from . import config
+            from .audio import preferred_device
+            config.set_mic(device)
+            try:
+                if app.listener is not None:
+                    app.listener.stop()          # _stop clears both loops; then rebuild on the new device
+            except Exception:
+                pass
+            app.start_voice()
+            cur = preferred_device()
+            for key, item in self._mic_items.items():
+                item.state = (1 if device in (None, "") else 0) if key == "auto" else \
+                             (1 if (device not in (None, "") and key == cur) else 0)
 
         @rumps.timer(2)
         def _tick(self, _):
