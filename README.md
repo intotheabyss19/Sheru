@@ -3,6 +3,10 @@
 Wake word **"Hey Sheru"** (say *Sheroo*). Speaks back in a young male voice.
 Tiered brain: instant grammar → local Qwen3-8B → Claude Code (your subscription) with a local fallback.
 
+> **© 2026 Yash Gupta. Licensed under [Apache-2.0](LICENSE).** You may use, modify, and build on this — even
+> commercially — but you **must keep the copyright/[NOTICE](NOTICE) and credit the original author** (Yash Gupta).
+> Using it without attribution violates the license.
+
 ## Platform requirements (read first)
 
 Sheru is built for **macOS on Apple Silicon (M-series)**. It is **not** cross-platform:

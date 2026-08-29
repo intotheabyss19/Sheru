@@ -1,11 +1,12 @@
 [project]
 name = "sheru"
 version = "0.1.0"
-description = "Add your description here"
+description = "Sheru — a local-first, hands-free voice assistant for macOS (Apple Silicon)"
 readme = "README.md"
 authors = [
     { name = "Yash Gupta", email = "yash110704@gmail.com" }
 ]
+license = "Apache-2.0"
 requires-python = ">=3.12"
 dependencies = [
     "google-api-python-client>=2.199.0",
