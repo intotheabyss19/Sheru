@@ -63,6 +63,8 @@ def _to_expr(text: str, last=None) -> str:
     t = re.sub(r"(\d+(?:\.\d+)?)\s*(?:percent|%)", r"(\1/100)", t)
     t = re.sub(r"\b(sqrt|factorial)\s+(\(?-?\d+(?:\.\d+)?\)?)", r"\1(\2)", t)  # sqrt 144 -> sqrt(144)
     t = t.replace("^", "**")
+    known = set(_FUNCS) | set(_CONSTS)                     # drop stray words ('the', 'at', 'of'…) that aren't math
+    t = re.sub(r"[a-z_]+", lambda m: m.group(0) if m.group(0) in known else " ", t)
     # leading operator with an implied 'that' — 'times 2', 'plus 10'
     ts = t.strip()
     if last is not None and re.match(r"^(\*\*|[+\-*/%])", ts):
