@@ -46,6 +46,9 @@ class Sheru:
         self._pending_path = config.DATA_DIR / "pending.json"   # persist it so a draft survives a restart
         self._restore_pending()
         self.panel = None            # 'Type to Sheru' input panel (created when the menu-bar UI starts)
+        self.orb = None              # Siri-style listening orb/particles, shown while capturing (lazy)
+        self._orb_timer = None       # NSTimer driving the orb from the live mic level
+        self._orb_style = None       # which style the current orb was built with
         self.dry_send = False        # tests set True to avoid sending real messages     # skip Claude Code until this time after a hard failure
 
     # ---- one command end-to-end -------------------------------------------------
@@ -293,14 +296,16 @@ class Sheru:
         self._listening = False          # clear a stale flag from a thread that already died (fixes "shows listening but won't")
         log.info("ACTIVATED — listening for a command")
         self._ensure_mic_level()
-        self.show_type_panel()
-        if self.panel is not None:
-            if getattr(self, "_warm", False):
-                self.panel._set_out("Listening…")
-                self.panel.set_status("🎙 listening…")
-            else:
-                self.panel._set_out("⏳ Warming up models… one moment.")
-                self.panel.set_status("⏳ warming up…")
+        self._ensure_panel()             # create it HIDDEN so the voice sink can render in; click the orb to reveal
+        try:
+            self._ensure_orb()
+            self.orb.show()              # the Siri-style orb IS the listening indicator now
+            self._start_orb_driver()
+        except Exception as e:
+            log.error("orb failed (%s) — showing the panel instead", e)
+            self.show_type_panel()
+            if self.panel is not None:
+                self.panel._set_out("Listening…" if getattr(self, "_warm", False) else "⏳ Warming up…")
         self._ptt_thread = threading.Thread(target=self._listen_and_handle, name="sheru-ptt", daemon=True)
         self._ptt_thread.start()
 
@@ -361,6 +366,7 @@ class Sheru:
                 first = False
         finally:
             self._listening = False
+            self._stop_orb_driver()                         # hide the orb + stop its timer when listening ends
             if self.panel is not None:                      # never leave a stale "listening…" showing
                 self.panel.set_status("")
 
@@ -402,15 +408,70 @@ class Sheru:
             self._onboarding = Onboarding.alloc().initWithApp_(self)
         self._onboarding.show()
 
-    def show_type_panel(self) -> None:
-        """Show the 'Type to Sheru' box (silent text input). Requires the NSApplication run loop."""
+    def _ensure_panel(self) -> None:
+        """Create the 'Type to Sheru' panel (hidden) so the voice sink can render into it even before it's shown."""
         if self.panel is None:
             from .panel import TypePanel
             self.panel = TypePanel.alloc().initWithSubmit_onMic_(
                 lambda text, sink: self.handle_text(text, sink=sink),
                 lambda: self.activate())
             self.panel.set_history_provider(self.recent_interactions)
+
+    def show_type_panel(self) -> None:
+        """Show the 'Type to Sheru' box (silent text input). Requires the NSApplication run loop."""
+        self._ensure_panel()
         self.panel.show()
+
+    # ---- listening orb (Siri-style) ------------------------------------------------
+    def _ensure_orb(self) -> None:
+        """Create/rebuild the listening orb for the current style (config.ORB_STYLE: 'orb'|'particles')."""
+        from . import config
+        from .orb import ListeningOrb, _OrbView, _ParticleView
+        want = config.ORB_STYLE
+        if self.orb is None or self._orb_style != want:
+            if self.orb is not None:
+                try:
+                    self.orb.hide()
+                except Exception:
+                    pass
+            self.orb = ListeningOrb.alloc().initWithOnClick_(self._orb_clicked)
+            self.orb._view_cls = _ParticleView if want == "particles" else _OrbView
+            self._orb_style = want
+
+    def _orb_clicked(self) -> None:
+        """Clicking the orb reveals the chat panel."""
+        try:
+            self.show_type_panel()
+        except Exception as e:
+            log.error("orb click -> panel failed: %s", e)
+
+    def _start_orb_driver(self) -> None:
+        from Foundation import NSTimer
+        from PyObjCTools import AppHelper
+        if self._orb_timer is not None:
+            return
+        _install_orb_target()
+
+        def _mk(_):
+            self._orb_timer = NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
+                1 / 30.0, _OrbTarget.alloc().initWithApp_(self), "tick:", None, True)
+        AppHelper.callAfter(_mk)
+
+    def _orb_tick(self) -> None:
+        from . import audio
+        if self.orb is not None:
+            self.orb.set_level(audio.LEVEL["v"])
+
+    def _stop_orb_driver(self) -> None:
+        t = self._orb_timer
+        if t is not None:
+            try:
+                t.invalidate()
+            except Exception:
+                pass
+            self._orb_timer = None
+        if self.orb is not None:
+            self.orb.hide()
 
     def recent_interactions(self, n: int = 25) -> list:
         """Recent (utterance, reply) pairs for the panel's history — from the PERSISTENT journal so past
@@ -683,6 +744,21 @@ def _install_progress_target():
     globals()["_ProgressTarget"] = ProgressTarget
 
 
+def _install_orb_target():
+    if "_OrbTarget" in globals():
+        return
+    import objc
+    from Foundation import NSObject
+    class OrbTarget(NSObject):
+        def initWithApp_(self, app):
+            self = objc.super(OrbTarget, self).init()
+            self._app = app
+            return self
+        def tick_(self, timer):
+            self._app._orb_tick()
+    globals()["_OrbTarget"] = OrbTarget
+
+
 def _wait_warm(app, timeout=60):
     import time as _t
     t0 = _t.monotonic()
@@ -733,14 +809,31 @@ def run_menubar(app: Sheru) -> None:
                 it = rumps.MenuItem(name, callback=lambda s, i=idx: self._set_mic(i))
                 it.state = 1 if (config.MIC_DEVICE not in (None, "") and idx == cur) else 0
                 mic.add(it); self._mic_items[idx] = it
-            self.menu = ["🎙 Talk to Sheru", "Type to Sheru", voice, mic, "Setup / Permissions…", "🎵 Set up Spotify…",
-                         "Mute", None, self._alarm_item, self._stop_item, None, "Quit Sheru"]
+            # listening animation style (orb / particles)
+            self._orb_items = {}
+            style = rumps.MenuItem("✨ Listening style")
+            for key, label in (("orb", "Orb (lightest)"), ("particles", "Particles")):
+                it = rumps.MenuItem(label, callback=lambda s, k=key: self._set_orb_style(k))
+                it.state = 1 if config.ORB_STYLE == key else 0
+                style.add(it); self._orb_items[key] = it
+            self.menu = ["🎙 Talk to Sheru", "Type to Sheru", voice, mic, style, "Setup / Permissions…",
+                         "🎵 Set up Spotify…", "Mute", None, self._alarm_item, self._stop_item, None, "Quit Sheru"]
 
         def _set_voice(self, backend):
             from . import config
             config.set_tts(backend)
             self._voice_sarvam.state = 1 if backend == "sarvam" else 0
             self._voice_local.state = 1 if backend != "sarvam" else 0
+
+        def _set_orb_style(self, key):
+            from . import config
+            config.set_orb_style(key)
+            try:
+                app._ensure_orb()               # rebuild for the next activation
+            except Exception:
+                pass
+            for k, item in self._orb_items.items():
+                item.state = 1 if k == key else 0
 
         def _set_mic(self, device):
             from . import config
