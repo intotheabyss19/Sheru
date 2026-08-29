@@ -404,8 +404,13 @@ class Sheru:
             self.panel.set_history_provider(self.recent_interactions)
         self.panel.show()
 
-    def recent_interactions(self, n: int = 6) -> list:
-        """Recent (utterance, reply) pairs for the panel's Spotlight-style recent list (newest first)."""
+    def recent_interactions(self, n: int = 25) -> list:
+        """Recent (utterance, reply) pairs for the panel's history — from the PERSISTENT journal so past
+        conversations show and survive restarts, falling back to the in-memory session if the journal is empty."""
+        from . import journal as _journal
+        pairs = _journal.recent_pairs(n)
+        if pairs:
+            return pairs
         pairs, pend = [], None
         for m in self.router.history:
             if m["role"] == "user":

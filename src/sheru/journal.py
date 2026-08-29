@@ -22,6 +22,26 @@ _CORRECTION = re.compile(
 _CANCEL = re.compile(r"\b(stop|cancel|never ?mind)\b", re.I)
 
 
+def recent_pairs(n: int = 25) -> list[tuple[str, str]]:
+    """(utterance, reply) pairs from the PERSISTENT journal, newest-first — so the panel can show real past
+    conversations across restarts (the in-memory history is wiped each launch). Skips internal '[...]' entries
+    and empties; for a Claude hand-off (no stored answer) shows the spoken ack or a marker."""
+    if not JOURNAL.exists():
+        return []
+    pairs: list[tuple[str, str]] = []
+    for line in JOURNAL.read_text().splitlines():
+        try:
+            d = json.loads(line)
+        except Exception:
+            continue
+        u = (d.get("utterance") or "").strip()
+        if not u or u.startswith("["):
+            continue
+        reply = (d.get("speech") or "").strip() or ("…handed to Claude" if d.get("handoff") else "")
+        pairs.append((u, reply))
+    return list(reversed(pairs))[:n]
+
+
 class Journal:
     def __init__(self) -> None:
         self._lock = threading.Lock()
