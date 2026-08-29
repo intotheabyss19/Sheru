@@ -304,9 +304,9 @@ class Sheru:
                 recorder.save(audio, text, self.stt.last_latency, kind="voice")
                 cmd = self.strip_wake(text)                # strip an optional wake word if still said
                 cmd = cmd if cmd else text
-                if self.panel is not None:
-                    self.panel._set_out("")
                 if cmd:
+                    if self.panel is not None:
+                        self.panel.push_user(cmd)          # show what Sheru HEARD in the chat (so you catch STT errors)
                     self.handle_text(cmd, sink=self._say_both)
                 # if a Claude handoff is in flight, wait it out so the answer + follow-up window arrive first
                 t_end = time.monotonic() + 155

@@ -55,6 +55,7 @@ class TypePanel(NSObject):
         self._panel = None
         self._history_provider = None      # () -> [(utterance, reply), ...] newest-first
         self._live = False                 # True while showing a live reply (so recent view doesn't clobber it)
+        self._chat = []                    # chat transcript: [{role:'you'|'sheru', text, pending?}]
         self._card = None                  # Siri-style message card (NSView) while confirming a message
         self._on_send = None
         self._on_cancel = None
@@ -152,28 +153,48 @@ class TypePanel(NSObject):
             text, {NSFontAttributeName: font, NSForegroundColorAttributeName: color})
 
     @objc.python_method
-    def _render_recent(self):
-        """Show recent commands + results (Spotlight-style) when the panel is idle/empty."""
-        items = []
-        if self._history_provider is not None:
+    def _seed_chat(self):
+        """First open: seed the transcript from recent history so past turns show as chat."""
+        if not self._chat and self._history_provider is not None:
             try:
-                items = self._history_provider() or []
+                for u, r in reversed(self._history_provider() or []):   # provider is newest-first; chat wants oldest-first
+                    self._chat.append({"role": "you", "text": u})
+                    if r:
+                        self._chat.append({"role": "sheru", "text": r})
             except Exception:
-                items = []
+                pass
+
+    @objc.python_method
+    def _render_chat(self):
+        """Render the conversation as a chat flow — You (what Sheru heard) + Sheru (its reply)."""
         ts = self._out.textStorage()
         ts.beginEditing()
         ts.setAttributedString_(NSAttributedString.alloc().initWithString_(""))
-        if not items:
-            ts.appendAttributedString_(self._attr("Type a command, or tap the mic.", NSColor.secondaryLabelColor(), 15))
-        else:
-            ts.appendAttributedString_(self._attr("RECENT\n", NSColor.tertiaryLabelColor(), 11))
-            for u, r in items:
-                ts.appendAttributedString_(self._attr("❯  " + u + "\n", NSColor.labelColor(), 15))
-                if r:
-                    ts.appendAttributedString_(self._attr("    " + r + "\n", NSColor.secondaryLabelColor(), 13))
-                ts.appendAttributedString_(self._attr("\n", NSColor.clearColor(), 4))
+        if not self._chat:
+            ts.appendAttributedString_(self._attr("Type a command, or tap the mic and speak.",
+                                                  NSColor.secondaryLabelColor(), 15))
+        for turn in self._chat:
+            you = turn["role"] == "you"
+            ts.appendAttributedString_(self._attr(("You   " if you else "Sheru   "),
+                                                  NSColor.systemBlueColor() if you else NSColor.tertiaryLabelColor(), 11))
+            ts.appendAttributedString_(self._attr((turn.get("text") or "…") + "\n",
+                                                  NSColor.labelColor() if you else NSColor.secondaryLabelColor(), 15))
+            ts.appendAttributedString_(self._attr("\n", NSColor.clearColor(), 3))
         ts.endEditing()
-        self._out.scrollRangeToVisible_((0, 0))
+        self._out.scrollRangeToVisible_((len(self._out.string()), 0))   # keep newest in view
+
+    @objc.python_method
+    def push_user(self, text: str):
+        """Show what Sheru heard (voice) or what you typed, then a pending Sheru turn to fill with the reply."""
+        def do():
+            self._live = True
+            self._clear_card()
+            self._chat.append({"role": "you", "text": text})
+            self._chat.append({"role": "sheru", "text": "…", "pending": True})
+            if len(self._chat) > 40:
+                del self._chat[: len(self._chat) - 40]
+            self._render_chat()
+        AppHelper.callAfter(do)
 
     @objc.python_method
     def show(self):
@@ -182,7 +203,8 @@ class TypePanel(NSObject):
         self._live = False
         self._clear_card()
         self._field.setStringValue_("")
-        self._render_recent()
+        self._seed_chat()
+        self._render_chat()
         NSApp.activateIgnoringOtherApps_(True)
         self._panel.makeKeyAndOrderFront_(None)
         self._panel.orderFrontRegardless()
@@ -306,10 +328,16 @@ class TypePanel(NSObject):
     def _append(self, text: str):
         def do():
             self._live = True
-            cur = self._out.string()
-            cur = "" if cur in ("…", "") else cur
-            self._out.setString_((cur + (" " if cur and not cur.endswith((" ", "\n")) else "") + text))
-            self._out.scrollRangeToVisible_((len(self._out.string()), 0))
+            self._clear_card()
+            if self._chat and self._chat[-1]["role"] == "sheru":
+                t = self._chat[-1]
+                if t.get("pending"):
+                    t["text"] = text; t["pending"] = False
+                else:
+                    t["text"] = t["text"] + (" " if t["text"] and not t["text"].endswith((" ", "\n")) else "") + text
+            else:
+                self._chat.append({"role": "sheru", "text": text})
+            self._render_chat()
         AppHelper.callAfter(do)
 
     def micPressed_(self, sender):
@@ -322,7 +350,7 @@ class TypePanel(NSObject):
             text = self._field.stringValue().strip()
             if text:
                 self._field.setStringValue_("")
-                self._set_out("…")
+                self.push_user(text)
                 self._on_submit(text, self._append)
             return True
         if selector == "cancelOperation:":
