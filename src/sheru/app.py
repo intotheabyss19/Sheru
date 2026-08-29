@@ -608,8 +608,21 @@ def run_menubar(app: Sheru) -> None:
             super().__init__("Sheru", icon=icon, template=True, quit_button=None)
             self._alarm_item = rumps.MenuItem("⏰ Alarms: none", callback=lambda _: app.show_alarms())
             self._stop_item = rumps.MenuItem("🔔 Stop ringing", callback=lambda _: alarms.stop_ring())
-            self.menu = ["🎙 Talk to Sheru", "Type to Sheru", "Setup / Permissions…", "🎵 Set up Spotify…",
+            # fixed 2-voice toggle (Sarvam cloud / local Kokoro) — a GUI option, not a voice command
+            self._voice_sarvam = rumps.MenuItem("Sarvam (shubh)", callback=lambda _: self._set_voice("sarvam"))
+            self._voice_local = rumps.MenuItem("Local (Kokoro)", callback=lambda _: self._set_voice("kokoro"))
+            self._voice_sarvam.state = 1 if config.TTS_BACKEND == "sarvam" else 0
+            self._voice_local.state = 1 if config.TTS_BACKEND != "sarvam" else 0
+            voice = rumps.MenuItem("🔊 Voice")
+            voice.add(self._voice_sarvam); voice.add(self._voice_local)
+            self.menu = ["🎙 Talk to Sheru", "Type to Sheru", voice, "Setup / Permissions…", "🎵 Set up Spotify…",
                          "Mute", None, self._alarm_item, self._stop_item, None, "Quit Sheru"]
+
+        def _set_voice(self, backend):
+            from . import config
+            config.set_tts(backend)
+            self._voice_sarvam.state = 1 if backend == "sarvam" else 0
+            self._voice_local.state = 1 if backend != "sarvam" else 0
 
         @rumps.timer(2)
         def _tick(self, _):
