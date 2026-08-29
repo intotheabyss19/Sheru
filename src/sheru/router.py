@@ -53,7 +53,7 @@ class Router:
         (re.compile(r"^(?:are you (?:listening|recording|there)|is recording (?:on|off)|what are you doing)\b.*"), "status"),
         (re.compile(r"^(?:stop|turn off|disable|pause)\s+recording\b.*|^stop saving\b.*"), "rec_off"),
         (re.compile(r"^(?:start|turn on|enable|resume)\s+recording\b.*"), "rec_on"),
-        (re.compile(r"^(?:stop|cancel|never ?mind|shut up|quiet)\b"), "stop"),
+        (re.compile(r"^(?:stop|cancel|never ?mind|shut up|quiet|enough)\b|^that'?s enough\b|^okay,? that'?s enough\b"), "stop"),
         (re.compile(r"^(?:set ?up|configure|connect|run setup|start setup)(?:\s+(?:my\s+)?(?:spotify|permissions?|access|sheru|everything|you))?\b.*$"), "setup"),
 
         (re.compile(r"^(?:go to|open|visit)\s+(?:https?://)?((?:[\w-]+\.)+[a-z]{2,}(?:/\S*)?)$"), "url"),
@@ -99,7 +99,7 @@ class Router:
         (re.compile(r"^(?:set|create|put|start)?\s*(?:an?\s+)?alarm\b(?:\s+(?:for|at)\b)?\s*(.*)$"), "alarm"),
         (re.compile(r"^wake me(?:\s+up)?\b(?:\s+(?:at|in)\b)?\s*(.*)$"), "alarm"),
         (re.compile(r"^(?:what(?:'s| is) the )?time(?: is it)?\??$|^what time is it|^(?:do you have|got|whats|tell me) the time\??$|^what'?s the time"), "time"),
-        (re.compile(r".*\bclipboard\b.*|^what did i (?:copy|cut)$|^read (?:me )?(?:my|the) copied text$"), "clipboard"),
+        (re.compile(r".*\bclipboard\b.*|^what did i (?:just\s+)?(?:copy|cut)$|^read (?:me )?(?:my|the) copied text$"), "clipboard"),
         (re.compile(r"^((?:write|create|generate|code|build|make)\s+.*\b(?:python|bash|shell|javascript|script|code|program|function|snippet)\b.*)$"), "claude"),
         (re.compile(r"^(?:message|text|msg|whatsapp|whats app|send)\s+(?:a\s+(?:message|text)\s+to\s+)?(.+?)\s+(?:that|saying|to say|to tell (?:him|her|them)|about)\s+(.+)$"), "message"),
         (re.compile(r"^(?:message|text|msg|whatsapp|whats app)\s+(\w+)\s+(.+)$"), "message"),
@@ -115,7 +115,7 @@ class Router:
         prev = None                                    # strip polite / filler prefixes so anchored rules still match
         while prev != t:
             prev = t
-            t = re.sub(r"^(?:hey|um+|uh+|so|okay|ok|please|kindly|alright|yeah|well)[,\s]+", "", t).strip()
+            t = re.sub(r"^(?:hey|um+|uh+|so|okay|ok|please|kindly|alright|yeah|well|from now on)[,\s]+", "", t).strip()
             t = re.sub(r"^(?:could|can|will|would)\s+(?:you|u)\s+(?:please\s+|kindly\s+|mind\s+)?", "", t).strip()
             t = re.sub(r"^i\s+(?:need|want|would\s+like|'?d\s+like)\s+(?:you\s+)?to\s+", "", t).strip()
             t = re.sub(r"^(?:i\s+wanna|let'?s|lemme|please)\s+", "", t).strip()
