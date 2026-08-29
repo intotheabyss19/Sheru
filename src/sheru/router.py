@@ -283,7 +283,9 @@ class Router:
                 return Result(system.media("play"))
             r = music.play_song(q)
             if r == "__RESOLVE_WITH_CLAUDE__":
-                return Result("Let me find that song…", resolve_song=q, followup=True)
+                if re.search(r"\bspotify\b", m.group(0)):
+                    return Result("Let me find that song…", resolve_song=q, followup=True)   # asked for Spotify -> Claude resolves the exact track
+                return Result(browser_agent.play_youtube(q), played=q, followup=True)         # generic 'play X' -> reliable YouTube fallback (no dead-end)
             return Result(r, played=q, followup=True)
         if kind == "trainer":
             from .actions import trainer
