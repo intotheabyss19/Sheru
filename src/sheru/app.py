@@ -111,8 +111,12 @@ class Sheru:
                 res.followup = True
         if res.speech:
             sink(res.speech)
-        if self._is_voice_sink(sink) and res.speech and getattr(res, "tool", None) != "stop":
-            self.allow_followup(12 if res.followup else 8)   # keep the mic open for a natural follow-up after ANY spoken reply
+        # Keep the mic open for a natural follow-up ONLY after conversational replies (answers/chat) or when the
+        # handler opted in — NOT after fire-and-forget actions (open/terminal/play), where re-arming invited a
+        # mic-echo loop that spawned duplicate windows.
+        conversational = getattr(res, "tool", None) in (None, "remember", "status", "help", "recall")
+        if self._is_voice_sink(sink) and res.speech and (res.followup or conversational):
+            self.allow_followup(12 if res.followup else 8)
         self._record_turn(text, res.speech)
         return res.speech
 
@@ -544,7 +548,7 @@ class Sheru:
         self.allow_followup(12)     # a spoken answer invites a follow-up; keep the mic open a bit longer
 
     # ---- wake-word detection on the transcript -----------------------------------
-    WAKE_RE = re.compile(r"^\W*(?:hey|hi|ok|okay|yo)?\W*(sheru|sharu|shiru|shero|sheroo|cheru|shiro|sherry|sheroux)\b[\s,.!?]*", re.I)
+    WAKE_RE = re.compile(r"^\W*(?:hey|hi|ok|okay|yo)?\W*(sheru|sharu|shiru|shero|sheroo|cheru|shiro|sherry|sheroux|charu|chaaru|churu|jeru|jaru|jeroo|sheroo)\b[\s,.!?]*", re.I)
 
     def strip_wake(self, text: str) -> str | None:
         """Return the command after the wake word, '' if only the wake word, None if no wake word."""
