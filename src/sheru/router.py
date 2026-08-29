@@ -323,9 +323,11 @@ class Router:
             secs, human = reminders.parse_when(body)
             if secs is None:
                 return Result("When should I remind you? Try 'remind me to call mom in 10 minutes'.")
-            task = re.sub(r"\s*\b(in\s+.+|at\s+.+)$", "", body).strip() or body
-            reminders.schedule(task, secs, self.say_async)
-            return Result(f"Okay, I'll remind you to {task} {human}.")
+            task = re.sub(r"\s*\b(in\s+.+|at\s+.+|tonight.*)$", "", body).strip()       # drop the time phrase
+            task = re.sub(r"^(?:to|that|about|me to|myself to)\s+", "", task).strip()   # 'to call mom' -> 'call mom'
+            reminders.schedule(task or "reminder", secs, self.say_async)
+            speech = f"Okay, I'll remind you to {task} {human}." if task else f"Okay, I'll remind you {human}."
+            return Result(speech)
         if kind == "set_location":
             from . import config
             raw = g[0].strip().rstrip(".")

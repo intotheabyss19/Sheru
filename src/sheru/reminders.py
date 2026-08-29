@@ -18,6 +18,11 @@ _WORDS = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
 def parse_when(text: str):
     """Return (seconds_from_now, human_label) or (None, None) if no time found."""
     t = text.strip().lower()
+    # time-of-day phrases -> "at H am/pm" so the clock parser below resolves them ("7 in the morning" -> 7am)
+    _HR = r"\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|noon|midnight"
+    t = re.sub(r"\b(" + _HR + r")\s+in\s+the\s+morning\b", r"at \1 am", t)
+    t = re.sub(r"\b(" + _HR + r")\s+(?:in\s+the\s+(?:afternoon|evening)|at\s+night|in\s+the\s+night|tonight)\b",
+               r"at \1 pm", t)
     m = re.search(r"\bin\s+(\d+|" + "|".join(_WORDS) + r")\s*(second|sec|minute|min|hour|hr)s?\b", t)
     if m:
         n = _WORDS.get(m.group(1), None)
