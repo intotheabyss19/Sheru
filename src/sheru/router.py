@@ -29,7 +29,8 @@ def _num(s: str) -> float:
 # Catch that shape in its spoken reply and hand off to Claude (which can actually browse) rather than speak it.
 _REFUSAL = re.compile(
     r"\b(?:can'?t|cannot|unable to|not able to|don'?t have)\b[^.?!]*"
-    r"\b(?:browse|access|internet|web|real[\s-]?time|current|live|up[\s-]?to[\s-]?date|latest|search|look\s?up)\b",
+    r"\b(?:browse|access|internet|web|real[\s-]?time|current|live|up[\s-]?to[\s-]?date|latest|search|look\s?up)\b"
+    r"|\b(?:can'?t|cannot|not able to|unable to)\b[^.?!]*\b(?:provide|give|offer)\b[^.?!]*\badvice\b",
     re.I)
 
 
