@@ -930,8 +930,9 @@ def run_menubar(app: Sheru) -> None:
         threading.Thread(target=lambda: (_wait_warm(app), app.start_voice()), daemon=True).start()
     else:
         import sheru.hotkey as _hk
-        ok = _hk.register(app.activate, key_code=_hk.KEY_F18)   # F5 (remapped->F18) via NSEvent, needs Accessibility
-        log.info("F18/F5 hotkey via NSEvent: %s | also: `sheru trigger` (bind any key)", ok)
+        # tap F5 -> orb + listen; HOLD F5 -> open the chat panel directly (F5 remapped->F18; needs Accessibility)
+        ok = _hk.register(app.activate, on_hold=app.show_type_panel, key_code=_hk.KEY_F18)
+        log.info("F18/F5 hotkey (tap=orb, hold=chat) via NSEvent: %s | also: `sheru trigger` (bind any key)", ok)
     if not is_done():
         from Foundation import NSTimer
         # show onboarding shortly after the run loop starts
