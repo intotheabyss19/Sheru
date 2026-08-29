@@ -12,11 +12,48 @@ Three backends (SHERU_STT):
 from __future__ import annotations
 
 import os
+import re
 import time
 
 import numpy as np
 
 from . import config
+
+
+def _collapse_repeats(text: str) -> str:
+    """Whisper/Parakeet hallucinate on real-mic audio by repeating a phrase many times in a row
+    ('This guy Uber not a guy' ×9). Collapse any immediately-repeated 1–6-word unit that recurs
+    3+ times down to a single occurrence, then squash a doubled word ('closing closing' -> 'closing').
+    Genuine speech almost never repeats a phrase verbatim, so this only fires on the degenerate loops."""
+    words = text.split()
+    if len(words) < 4:
+        return text
+    out, i, changed = [], 0, False
+    while i < len(words):
+        best = None
+        for n in range(min(6, (len(words) - i) // 2), 0, -1):
+            unit = words[i:i + n]
+            reps, j = 1, i + n
+            while words[j:j + n] == unit:
+                reps += 1
+                j += n
+            if reps >= 3:
+                best = (unit, j)
+                break
+        if best:
+            out.extend(best[0])
+            i = best[1]
+            changed = True
+        else:
+            out.append(words[i])
+            i += 1
+    dedup = []                                      # doubled word ('closing closing' -> 'closing')
+    for w in out:
+        if dedup and dedup[-1].lower().strip(".,!?") == w.lower().strip(".,!?"):
+            changed = True
+            continue
+        dedup.append(w)
+    return " ".join(dedup) if changed else text
 
 
 def _wav_bytes(audio: np.ndarray) -> bytes:
@@ -67,7 +104,7 @@ class Transcriber:
             text = self._transcribe_sarvam(audio)
             if text is not None:
                 self.last_latency = time.perf_counter() - t0
-                return text.strip()
+                return _collapse_repeats(text.strip())
             return self._local_fallback().transcribe(audio)   # offline / no key / clip too long
         self.load()
         from . import mlx_pool
@@ -99,7 +136,7 @@ class Transcriber:
                 return self._model.generate(mel)[0].text
             text = mlx_pool.run(_do)
         self.last_latency = time.perf_counter() - t0
-        return text.strip()
+        return _collapse_repeats(text.strip())
 
     def _local_fallback(self) -> "Transcriber":
         if self._fallback is None:
