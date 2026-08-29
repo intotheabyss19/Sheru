@@ -6,7 +6,7 @@ is on (Kokoro + Whisper) — no Sarvam credits burned.
 ## ✅ Working now (validated) — press F5 or Type-to-Sheru
 | Command | What it does | Status |
 |---|---|---|
-| "play tum hi ho **on youtube**" / "**youtube** lofi hip hop" | resolves the first video and opens the watch URL in **Brave/piyush** (autoplays, stays open) | ✅ resolution + open both verified |
+| "play tum hi ho **on youtube**" / "**youtube** lofi hip hop" | resolves the first video and opens the watch URL in **Brave/piyush** (autoplays, stays open) | ✅ **validated LIVE end-to-end** — opened + played a video in Brave/piyush, confirmed the watch URL |
 | "play despacito **on youtube music**" | same on music.youtube.com | ✅ |
 | "**open gmail**" / "check my email" | opens Gmail in the current browser+profile | ✅ |
 | "**use brave**" / "use chrome" / "use zen" | picks the automation browser | ✅ |
