@@ -99,7 +99,8 @@ class Sheru:
         if res.handoff:
             if res.speech:
                 sink(res.speech)
-            self._delegate(res.handoff, sink, user_text=text)   # records the turn + resumes/injects conversation context
+            self._delegate(res.handoff, sink, user_text=text,   # records the turn + resumes/injects conversation context
+                           artifact=getattr(res, "artifact", None))
             return res.speech
         if (res.tool and res.tool not in ("feedback_good", "feedback_bad", "stop", "help", "status",
                                           "remember", "set_reply_lang", "set_voice")
@@ -213,6 +214,8 @@ class Sheru:
 
     def _handle_pending(self, text: str, sink) -> str:
         p = self.pending
+        if p.get("kind") == "artifact":
+            return self._handle_artifact_pending(text, sink)
         if p.get("kind") == "need_number":
             return self._handle_number(text, sink)
         low = text.strip().lower().rstrip(".!")
@@ -432,13 +435,66 @@ class Sheru:
         """Run a confirm/cancel word through the pending state machine off the UI thread (send can block)."""
         threading.Thread(target=lambda: self.handle_text(word, sink=self.panel._append), daemon=True).start()
 
+    def _offer_artifact(self, artifact: dict, sink) -> None:
+        """Claude finished writing the file — set a pending offer to run it or move it elsewhere."""
+        from pathlib import Path
+        path = Path(artifact.get("path", ""))
+        if not path.exists():
+            return                              # Claude didn't write where we asked; leave its spoken reply as-is
+        self.pending = {"kind": "artifact", "path": str(path), "request": artifact.get("request", "")}
+        self.allow_followup(20)                 # keep the mic open for the yes / move answer
+        sink(f"Saved it to {path.name}. Want to see it, or should I move it somewhere?")
+
+    RUN_WORDS = ("yes", "yeah", "yep", "sure", "ok", "okay", "show", "see", "play", "run", "go", "do it")
+
+    def _handle_artifact_pending(self, text: str, sink) -> str:
+        from pathlib import Path
+        from .actions import generate
+        p = self.pending
+        path = Path(p["path"])
+        low = text.strip().lower().rstrip(".!")
+        m = re.search(r"\b(?:move|save|put|copy|place|relocate)\b.*?\b(?:to|in|into|inside|under)\b\s+(.+)$", low)
+        if m or re.search(r"\b(?:move|relocate)\b", low):
+            dest = generate.resolve_dir(m.group(1) if m else "")
+            if dest is None:
+                sink("Where should I move it? Say a folder like 'LearningPhase' or a full path.")
+                return "artifact-need-dir"
+            try:
+                generate.move(path, dest)
+            except Exception as e:
+                self.pending = None
+                sink(f"I couldn't move it: {e}")
+                return "artifact-move-failed"
+            self.pending = None
+            sink(f"Moved it to {dest}.")
+            return "artifact-moved"
+        if low in self.DENY or low.startswith(("no", "cancel", "don't", "dont", "leave", "forget", "nothing")):
+            self.pending = None
+            sink(f"Okay, it's saved at {path} if you want it later.")
+            return "artifact-kept"
+        if low in self.CONFIRM or low.startswith(self.RUN_WORDS) or any(w in low for w in ("see", "run", "play", "show")):
+            self.pending = None
+            sink("Running it now.")
+
+            def _go():
+                ok, out = generate.run(path)
+                if ok:
+                    sink("Done." + (f" It printed: {out}" if out and len(out) < 160 else ""))
+                else:
+                    sink(f"It didn't run cleanly — {out}. Want me to have Claude fix it?")
+            threading.Thread(target=_go, daemon=True).start()
+            return "artifact-run"
+        sink("Say 'yes' to run it, or 'move it to a folder'.")
+        return "artifact-reoffer"
+
     def allow_followup(self, seconds: float = 6.0) -> None:
         self.followup_until = time.monotonic() + seconds
 
-    def _delegate(self, task: str, sink=None, user_text: str | None = None) -> None:
+    def _delegate(self, task: str, sink=None, user_text: str | None = None, artifact: dict | None = None) -> None:
         """Prefer Claude Code (subscription); fall back to the local model offline or on failure.
         Resume the same Claude session for a follow-up (a Claude turn <2 min ago) so continued conversation
-        keeps its context; otherwise start a fresh thread but inject the recent turns for reference-resolution."""
+        keeps its context; otherwise start a fresh thread but inject the recent turns for reference-resolution.
+        When `artifact` is set, Claude was asked to WRITE a file; on completion, offer to run or move it."""
         from . import net
         sink = sink or self.speaker.speak
         resume = (self.claude.session_id is not None
@@ -456,6 +512,8 @@ class Sheru:
                     self.router.history.append({"role": "assistant", "content": final[:800]})
                 self._last_claude_ts = time.monotonic()
                 self._after_claude()
+                if artifact:
+                    self._offer_artifact(artifact, sink)
 
             self.claude.run(payload, on_sentence=sink, resume=resume, on_done=_done,
                             on_error=lambda e: (self._stop_progress(), self._local_fallback(task, e, sink)))

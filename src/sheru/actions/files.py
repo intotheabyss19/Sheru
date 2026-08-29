@@ -85,3 +85,45 @@ def open_terminal(where: str | None) -> str:
     subprocess.Popen(["open", "-na", "Ghostty", "--args",
                       "--window-save-state=never", f"--working-directory={base}"])
     return f"Opened a terminal in {base.name or 'your home folder'}."
+
+
+def resolve_dir_smart(where: str | None) -> Path | None:
+    """Resolve a spoken directory to a real path: known bases -> a home subdir -> an explicit path -> zoxide
+    frecency (so arbitrary project dirs the user actually visits, like 'Afterquery', resolve). None if unknown."""
+    if not where:
+        return HOME
+    w = where.strip().lower().rstrip(".")
+    w = re.sub(r"^(?:my|the)\s+", "", w)
+    w = re.sub(r"\s+(?:folder|directory|dir|repo|project)$", "", w).strip()
+    if w in _BASES:
+        return _BASES[w]
+    if w.startswith(("~", "/")):
+        p = Path(w).expanduser()
+        return p if p.is_dir() else None
+    cand = HOME / w.title()
+    if cand.is_dir():
+        return cand
+    try:                                             # zoxide: best frecency match for the spoken name
+        out = subprocess.run(["zoxide", "query", w], capture_output=True, text=True, timeout=4)
+        if out.returncode == 0 and out.stdout.strip():
+            p = Path(out.stdout.strip())
+            if p.is_dir():
+                return p
+    except (FileNotFoundError, OSError, subprocess.SubprocessError):
+        pass
+    return None
+
+
+def open_terminal_claude(where: str | None) -> str:
+    """Open a Ghostty terminal cd'd into `where` and start an interactive `claude` session there. Resolves the
+    directory via zoxide when it isn't an obvious home folder; returns a '__ASK_DIR__' sentinel if it can't."""
+    import shlex
+    from .. import config
+    base = resolve_dir_smart(where)
+    if base is None:
+        return "__ASK_DIR__"
+    env = f"CLAUDE_CONFIG_DIR={shlex.quote(config.CLAUDE_CONFIG_DIR)} " if config.CLAUDE_CONFIG_DIR else ""
+    cmd = f"cd {shlex.quote(str(base))} && {env}exec claude"     # land in the dir, then hand off to interactive claude
+    subprocess.Popen(["open", "-na", "Ghostty", "--args", "--window-save-state=never",
+                      "-e", "/bin/zsh", "-lc", cmd])
+    return f"Starting a Claude session in {base.name}."

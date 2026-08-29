@@ -37,6 +37,7 @@ class Result:
     resolve_song: str | None = None  # query the app should resolve via Claude, then play
     played: str | None = None        # the song query just played (so "no, wrong song" can re-resolve)
     feedback: str | None = None      # explicit good/bad rating on the PREVIOUS action (judges Sheru's workings)
+    artifact: dict | None = None     # {path, request} -> after Claude writes it, offer to run/move it
 
 
 @dataclass
@@ -60,6 +61,10 @@ class Router:
         (re.compile(r"^(?:set ?up|configure|connect|run setup|start setup)(?:\s+(?:my\s+)?(?:spotify|permissions?|access|sheru|everything|you))?\b.*$"), "setup"),
 
         (re.compile(r"^(?:go to|open|visit)\s+(?:https?://)?((?:[\w-]+\.)+[a-z]{2,}(?:/\S*)?)$"), "url"),
+        # start an INTERACTIVE claude session in a directory (zoxide-resolved) — before the trainer rules, which
+        # otherwise swallow "start a claude session …"
+        (re.compile(r".*\bclaude(?:\s+code)?\s+session\b.*?\b(?:in|at|inside|under|for)\b\s+(.+)$"), "term_claude"),
+        (re.compile(r"^(?:open|start|launch|run|fire up)\s+(?:a\s+|an\s+)?claude(?:\s+code)?\b.*?\b(?:in|at|inside|under|for)\b\s+(.+)$"), "term_claude"),
         # self-improvement: open a Claude Code "trainer" session on Sheru's own code (explicit request only)
         (re.compile(r"^(?:get|have|ask|tell|make)\s+(?:your\s+|the\s+)?(?:trainer|claude(?:\s+code)?)\s+(?:to\s+)?(?:fix|improve|debug|change|update|patch|look at|work on|sort out|handle|figure out|look into|retrain)\s+(.+)$"), "trainer"),
         (re.compile(r"^(?:fix|improve|debug|retrain|patch|update)\s+(?:your\s?self|sheru)(?:['’]s)?(?:\s+(.+))?$"), "trainer"),
@@ -106,7 +111,7 @@ class Router:
         (re.compile(r"^wake me(?:\s+up)?\b(?:\s+(?:at|in)\b)?\s*(.*)$"), "alarm"),
         (re.compile(r"^(?:what(?:'s| is) the )?time(?: is it)?\??$|^what time is it|^(?:do you have|got|whats|tell me) the time\??$|^what'?s the time"), "time"),
         (re.compile(r".*\bclipboard\b.*|^what did i (?:just\s+)?(?:copy|cut)$|^read (?:me )?(?:my|the) copied text$"), "clipboard"),
-        (re.compile(r"^((?:write|create|generate|code|build|make)\s+.*\b(?:python|bash|shell|javascript|script|code|program|function|snippet)\b.*)$"), "claude"),
+        (re.compile(r"^((?:write|create|generate|code|build|make|animate|plot|draw|simulate|render)\s+.*\b(?:python|bash|shell|javascript|script|code|program|function|snippet|manim|animation|plot|chart|graph|figure|simulation|demo|numpy|pandas|matplotlib|visuali[sz]ation|algorithm)\b.*)$"), "claude"),
         (re.compile(r"^(?:message|text|msg|whatsapp|whats app|send)\s+(?:a\s+(?:message|text)\s+to\s+)?(.+?)\s+(?:that|saying|to say|to tell (?:him|her|them)|about)\s+(.+)$"), "message"),
         (re.compile(r"^(?:message|text|msg|whatsapp|whats app)\s+(\w+)\s+(.+)$"), "message"),
         (re.compile(r"^remind me (?:to |that )?(.+)$"), "remind"),
@@ -166,6 +171,13 @@ class Router:
             return Result(apps.open_app(g[0]))
         if kind == "terminal_in":
             return Result(files.open_terminal((g[0] or "").strip() or None))
+        if kind == "term_claude":
+            where = (next((x for x in g if x), "") or "").strip()
+            r = files.open_terminal_claude(where or None)
+            if r == "__ASK_DIR__":
+                return Result(f"I couldn't find the {where or 'that'} directory. Where is it? "
+                              "Say the full path, like 'open claude in ~/Projects/Afterquery'.")
+            return Result(r)
         if kind == "fs_make":
             return Result(files.make(g[0]), followup=True)
         if kind == "quit":
@@ -336,7 +348,14 @@ class Router:
             msg = self.memory.remember(g[0]) if self.memory else "I don't have a memory store yet."
             return Result(msg)
         if kind == "claude":
-            return Result("On it.", handoff=g[0], tier=2)
+            task = (g[0] or "").strip()
+            from .actions import generate
+            if generate.looks_generative(task):
+                path = generate.mint_path(task)
+                return Result("On it — I'll write the code and let you know when it's ready.",
+                              handoff=generate.build_task(task, path), tier=2,
+                              artifact={"path": str(path), "request": task})
+            return Result("On it.", handoff=task, tier=2)
         return Result("Hmm.")
 
     # ---- Tier 1 local LLM -----------------------------------------------------
