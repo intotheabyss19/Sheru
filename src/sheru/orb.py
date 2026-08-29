@@ -23,9 +23,9 @@ from AppKit import (
 )
 from Foundation import NSMakeRect, NSObject, NSPoint
 from PyObjCTools import AppHelper
-from Quartz import CAGradientLayer, CABasicAnimation, CATransaction, CATransform3DMakeScale
+from Quartz import CAGradientLayer, CATransaction, CATransform3DMakeScale
 
-ORB = 90                     # window + orb diameter (px) — half of the first pass (Yash: "half the radius")
+ORB = 100                    # window + orb diameter (px)
 _amp = {"v": 0.0}            # shared live mic amplitude 0..1 (smoothed), written by the sampler thread
 
 
@@ -42,36 +42,30 @@ class _OrbView(NSView):
         orb = CAGradientLayer.layer()
         orb.setType_("radial")                                # kCAGradientLayerRadial
         orb.setColors_([
-            NSColor.colorWithSRGBRed_green_blue_alpha_(0.55, 0.80, 1.0, 1.0).CGColor(),   # bright core
-            NSColor.colorWithSRGBRed_green_blue_alpha_(0.40, 0.45, 0.98, 1.0).CGColor(),
-            NSColor.colorWithSRGBRed_green_blue_alpha_(0.65, 0.35, 0.95, 0.0).CGColor(),   # fades out at the rim
+            NSColor.colorWithSRGBRed_green_blue_alpha_(1.0, 0.88, 0.46, 1.0).CGColor(),    # bright sun core
+            NSColor.colorWithSRGBRed_green_blue_alpha_(0.96, 0.56, 0.13, 1.0).CGColor(),   # lion dark yellow-orange
+            NSColor.colorWithSRGBRed_green_blue_alpha_(0.86, 0.33, 0.03, 0.0).CGColor(),   # deep orange, fades at rim
         ])
         orb.setLocations_([0.0, 0.55, 1.0])
         orb.setStartPoint_(NSPoint(0.5, 0.5))
         orb.setEndPoint_(NSPoint(1.0, 1.0))
         orb.setFrame_(NSMakeRect(cx - r, cy - r, 2 * r, 2 * r))
         orb.setCornerRadius_(r)
-        orb.setShadowColor_(NSColor.colorWithSRGBRed_green_blue_alpha_(0.5, 0.6, 1.0, 1.0).CGColor())
-        orb.setShadowRadius_(r * 0.4)                         # glow scales with the orb
-        orb.setShadowOpacity_(0.9)
+        orb.setShadowColor_(NSColor.colorWithSRGBRed_green_blue_alpha_(1.0, 0.62, 0.16, 1.0).CGColor())  # sun glow
+        orb.setShadowRadius_(r * 0.55)                        # radiant glow, scales with the orb
+        orb.setShadowOpacity_(0.95)
         orb.setShadowOffset_((0, 0))
         self.layer().addSublayer_(orb)
         self._orb = orb
         self._r = r
-        # gentle idle breathing so it's alive even in silence (amplitude adds on top)
-        pulse = CABasicAnimation.animationWithKeyPath_("transform.scale")
-        pulse.setFromValue_(0.92)
-        pulse.setToValue_(1.04)
-        pulse.setDuration_(1.6)
-        pulse.setAutoreverses_(True)
-        pulse.setRepeatCount_(1e9)
-        orb.addAnimation_forKey_(pulse, "breathe")
         return self
 
     @objc.python_method
     def apply_level(self, v):
-        # scale the orb by live amplitude, on top of the idle breathe; no implicit animation (smooth per-frame)
-        s = 1.0 + 0.6 * max(0.0, min(1.0, v))
+        # single source of scale (no CA-animation override, which was hiding the voice): a gentle idle breathe
+        # PLUS live amplitude, recomputed every frame so it actually reacts to your voice.
+        idle = 0.05 * (0.5 + 0.5 * math.sin(time.monotonic() * 3.0))
+        s = 1.0 + idle + 0.7 * max(0.0, min(1.0, v))
         CATransaction.begin()
         CATransaction.setDisableActions_(True)
         self._orb.setTransform_(_scale(s))
@@ -112,10 +106,12 @@ class ListeningOrb(NSObject):
         view = _OrbView.alloc().initWithFrame_click_(NSMakeRect(0, 0, ORB, ORB), self._on_click)
         p.setContentView_(view)
         self._view = view
-        # bottom-centre of the main screen, a little up from the dock
+        # top-right, just under the menu bar (where Siri's orb sits); visibleFrame excludes the menu bar + dock
         from AppKit import NSScreen
-        f = NSScreen.mainScreen().frame()
-        p.setFrameOrigin_((f.size.width / 2 - ORB / 2, 120))
+        vf = NSScreen.mainScreen().visibleFrame()
+        m = 16
+        p.setFrameOrigin_((vf.origin.x + vf.size.width - ORB - m,
+                           vf.origin.y + vf.size.height - ORB - m))
         self._panel = p
 
     @objc.python_method
@@ -175,8 +171,13 @@ def main():
     t0 = time.monotonic()
 
     class _T(NSObject):
+        _n = 0
+
         def tick_(self, _):
             orb.set_level(_amp["v"])
+            self._n += 1
+            if self._n % 30 == 0:                 # ~1x/sec: confirm the mic is actually feeding levels
+                print(f"mic level: {_amp['v']:.3f}")
             if time.monotonic() - t0 > 22:        # end the preview after ~22s
                 orb.hide()
                 AppHelper.stopEventLoop()
