@@ -87,3 +87,12 @@ TTS_PITCH = float(os.environ.get("SHERU_PITCH", "1.0"))          # 1.0 = normal.
 TTS_RATE = float(os.environ.get("SHERU_RATE", "0.5"))
 TTS_PREFERRED = ("Rishi", "Daniel", "Fred", "Aaron", "Tom")     # male, best-quality match wins (Rishi = enhanced Indian-English, installed)
 NAME_SPOKEN = "Sheroo"                                           # how Sheru pronounces its own name
+
+# TTS engine: "avspeech" (built-in, instant) or "kokoro" (mlx-audio Kokoro-82M — natural neural voice). Kokoro
+# needs `mlx-audio` + `misaki[en]` and a one-time spaCy `en_core_web_sm` fetch (do it on a clean network, not the
+# Sophos wifi which resets runtime downloads). Falls back to AVSpeech automatically on any failure/NaN.
+# Set profile 'tts_backend' or SHERU_TTS=kokoro.
+TTS_BACKEND = os.environ.get("SHERU_TTS") or _P.get("tts_backend") or "avspeech"
+KOKORO_MODEL = os.environ.get("SHERU_KOKORO", "mlx-community/Kokoro-82M-bf16")
+KOKORO_VOICE = os.environ.get("SHERU_KOKORO_VOICE") or _P.get("kokoro_voice") or "am_michael"   # male US; Hindi: hm_omega / hf_alpha
+KOKORO_SPEED = float(os.environ.get("SHERU_KOKORO_SPEED", "1.0"))

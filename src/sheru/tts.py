@@ -38,6 +38,7 @@ class Speaker:
         self._proc: subprocess.Popen | None = None
         self._synth = AVSpeechSynthesizer.alloc().init() if AVSpeechSynthesizer else None
         self._voice = _pick_voice() if self._synth else None
+        self._kokoro = None          # lazily-loaded Kokoro-82M model (when config.TTS_BACKEND == "kokoro")
         self._speak_started = 0.0
         self._max_speak_s = 30.0     # guard: never report 'speaking' longer than this (stuck-synth safety)
 
@@ -53,7 +54,10 @@ class Speaker:
             self.stop()
             import time as _t
             self._speak_started = _t.monotonic()
-            if self._synth is not None:
+            spoke = self._speak_kokoro(text) if config.TTS_BACKEND == "kokoro" else False
+            if spoke:
+                pass                                  # Kokoro plays via afplay (self._proc); stop/wait/speaking handle it
+            elif self._synth is not None:
                 u = AVSpeechUtterance.speechUtteranceWithString_(text)
                 if self._voice is not None:
                     u.setVoice_(self._voice)
@@ -65,7 +69,37 @@ class Speaker:
         if wait:
             self.wait()
 
+    def _ensure_kokoro(self):
+        if self._kokoro is None:
+            from mlx_audio.tts.utils import load_model
+            from . import mlx_pool
+            self._kokoro = mlx_pool.run(load_model, config.KOKORO_MODEL)
+        return self._kokoro
+
+    def _speak_kokoro(self, text: str) -> bool:
+        """Generate with Kokoro-82M, play via afplay (reusing the subprocess path). False on any failure/NaN
+        so speak() falls back to AVSpeech and the user still hears something."""
+        try:
+            import numpy as np, tempfile
+            import soundfile as sf
+            from . import mlx_pool
+            m = self._ensure_kokoro()
+            chunks = mlx_pool.run(lambda: [np.asarray(r.audio) for r in
+                                           m.generate(text=text, voice=config.KOKORO_VOICE, speed=config.KOKORO_SPEED)])
+            audio = np.concatenate(chunks) if chunks else None
+            if audio is None or not audio.size or bool(np.isnan(audio).any()) or float(np.abs(audio).max()) < 1e-4:
+                return False                          # known Kokoro-MLX NaN/silent bug -> AVSpeech fallback
+            path = tempfile.mktemp(suffix=".wav")
+            sf.write(path, audio.astype("float32"), 24000)
+            self._proc = subprocess.Popen(["afplay", path])
+            return True
+        except Exception:
+            return False
+
     def wait(self) -> None:
+        if self._proc is not None:                    # Kokoro/say path (afplay/say subprocess)
+            self._proc.wait()
+            return
         if self._synth is not None:
             import time
             t0 = time.monotonic()
@@ -73,8 +107,6 @@ class Speaker:
                 time.sleep(0.02)                      # speech starts asynchronously
             while self._synth.isSpeaking():
                 time.sleep(0.05)
-        elif self._proc is not None:
-            self._proc.wait()
 
     def stop(self) -> None:
         if self._synth is not None and self._synth.isSpeaking():
@@ -88,6 +120,6 @@ class Speaker:
         import time as _t
         if self._speak_started and _t.monotonic() - self._speak_started > self._max_speak_s:
             return False     # stuck-synth guard: don't let a hung voice mute the mic forever
-        if self._synth is not None:
-            return bool(self._synth.isSpeaking())
-        return self._proc is not None and self._proc.poll() is None
+        av = bool(self._synth.isSpeaking()) if self._synth is not None else False
+        proc = self._proc is not None and self._proc.poll() is None
+        return av or proc     # AVSpeech OR the afplay/say subprocess (Kokoro path)
