@@ -48,9 +48,19 @@ class Transcriber:
             import mlx_whisper
             repo = os.environ.get("SHERU_WHISPER", "mlx-community/whisper-large-v3-turbo")
             audio = audio.astype(np.float32)
+            forced = config.STT_LANG
+            # anti-hallucination settings: single greedy temp, don't feed prior text (stops runaway loops),
+            # bias vocabulary toward Hinglish. no_speech/logprob thresholds suppress transcribing silence.
+            opts = dict(path_or_hf_repo=repo, temperature=0.0, condition_on_previous_text=False,
+                        no_speech_threshold=0.6, logprob_threshold=-1.0,
+                        initial_prompt="A conversation mixing Hindi and English (Hinglish).")
             def _do():
-                # language=None -> auto-detect; handles Hindi, English, and Hinglish code-switching
-                return mlx_whisper.transcribe(audio, path_or_hf_repo=repo)["text"]
+                if forced:
+                    return mlx_whisper.transcribe(audio, language=forced, **opts).get("text", "")
+                r = mlx_whisper.transcribe(audio, **opts)                    # auto-detect...
+                if r.get("language") not in ("en", "hi"):                    # ...clamp: never accept Russian/other on Hindi or noise
+                    r = mlx_whisper.transcribe(audio, language="en", **opts)
+                return r.get("text", "")
             text = mlx_pool.run(_do)
         else:
             import mlx.core as mx

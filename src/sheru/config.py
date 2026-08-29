@@ -45,6 +45,9 @@ LOCAL_LLM_FAST = os.environ.get("SHERU_LLM_FAST") or None                       
 # STT backend: "parakeet" (fast, English/European only) or "whisper" (Hindi + English + Hinglish, slower). Real
 # Hindi NEEDS whisper — parakeet mangles it into garbage. Set profile 'stt_backend' or SHERU_STT=whisper.
 STT_BACKEND = os.environ.get("SHERU_STT") or _P.get("stt_backend") or "parakeet"
+# Force Whisper to a language ("en"/"hi") instead of auto-detect; None = auto-detect but CLAMPED to en/hi
+# (Parakeet-v3 and Whisper both hallucinate Russian/other Cyrillic on Hindi speech or noise — the clamp kills that).
+STT_LANG = os.environ.get("SHERU_STT_LANG") or _P.get("stt_lang") or None
 
 
 def _claude_config_dir() -> str | None:
