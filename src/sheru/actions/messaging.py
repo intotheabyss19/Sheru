@@ -139,9 +139,10 @@ def send_whatsapp(handle: str, text: str, dry_run: bool = False) -> bool:
 
 
 def call_whatsapp(handle: str, video: bool = False, dry_run: bool = False) -> bool:
-    """Open the contact's WhatsApp chat, then place a call by driving WhatsApp's own Call ▸ Voice/Video Call
-    menu item (robust — no coordinate-clicking). Fires ONLY while WhatsApp is confirmed frontmost. dry_run
-    opens the chat and stops WITHOUT calling (used to verify the flow without ringing anyone)."""
+    """Open the contact's WhatsApp chat, then place a call via WhatsApp's own Call ▸ Voice/Video Call menu item.
+    The Call menu only exposes 'Voice Call'/'Video Call' once a chat is OPEN and loaded, so we POLL for it (up to
+    ~6 s) instead of a fixed wait, then click it. Robust — no coordinate-clicking. dry_run opens the chat and
+    stops WITHOUT calling. Returns True only if the call item was found + clicked."""
     digits = re.sub(r"\D", "", handle)
     subprocess.run(["open", f"whatsapp://send?phone={digits}"], check=False)
     for _ in range(25):                        # wait up to ~5 s for WhatsApp to come forward on that chat
@@ -150,18 +151,26 @@ def call_whatsapp(handle: str, video: bool = False, dry_run: bool = False) -> bo
             break
     else:
         return False
-    time.sleep(1.3)                            # let the conversation load + the Call menu enable
     if dry_run:                                # verified up to the call — never actually rings
         return True
-    if _frontmost() != "WhatsApp":             # re-verify right before triggering the call
-        return False
     item = "Video Call" if video else "Voice Call"     # menu titles carry a U+200E prefix -> match by 'contains'
-    script = ('tell application "System Events" to tell process "WhatsApp" to '
-              'click (first menu item of menu 1 of '
-              '(first menu bar item of menu bar 1 whose name contains "Call") '
-              f'whose name contains "{item}")')
+    # poll INSIDE AppleScript: wait for the chat to load + the Call menu to expose the enabled item, then click it
+    script = f'''tell application "System Events" to tell process "WhatsApp"
+        set callMenu to menu 1 of (first menu bar item of menu bar 1 whose name contains "Call")
+        repeat 30 times
+            try
+                set theItem to (first menu item of callMenu whose name contains "{item}")
+                if enabled of theItem then
+                    click theItem
+                    return "ok"
+                end if
+            end try
+            delay 0.2
+        end repeat
+        return "notfound"
+    end tell'''
     r = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
-    return r.returncode == 0
+    return "ok" in (r.stdout or "")
 
 
 def prefill(handle: str, text: str, app: str = "messages", dry_run: bool = False) -> str:

@@ -130,7 +130,8 @@ class Sheru:
         conversational = getattr(res, "tool", None) in (None, "remember", "status", "help", "recall")
         asks_back = bool(res.speech) and res.speech.rstrip().endswith("?")   # a question invites — and needs time for — a reply
         if self._is_voice_sink(sink) and res.speech and (res.followup or conversational or asks_back):
-            self.allow_followup(15 if (res.followup or asks_back) else 10)
+            # generous windows so the conversation doesn't drop mid-thought; end it explicitly with "no"/"that's all"
+            self.allow_followup(25 if (res.followup or asks_back) else 20)
         self._record_turn(text, res.speech)
         return res.speech
 
@@ -466,10 +467,11 @@ class Sheru:
         from PyObjCTools import AppHelper
         self._progress_label = label
         self._progress_t0 = _t.monotonic()
-        if self.orb is not None:                            # recolour the orb: blue = escalated to Claude
-            self.orb.set_state("claude" if "Claude" in label else "local")
+        state = "claude" if "Claude" in label else "local"
+        if self.orb is not None:                            # recolour the orb: blue = escalated to Claude.
+            AppHelper.callAfter(lambda: self.orb and self.orb.set_state(state))   # MUST be main thread (CoreAnimation)
         if self.panel is not None:                          # and tag the chat turn ⚡ local / ☁️ Claude
-            self.panel.set_source("claude" if "Claude" in label else "local")
+            self.panel.set_source(state)
         def _mk(_):
             self._progress_timer = NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
                 1.0, _ProgressTarget.alloc().initWithApp_(self), "tick:", None, True)
@@ -487,7 +489,8 @@ class Sheru:
             t.invalidate(); self._progress_timer = None
         self._progress_t0 = None
         if self.orb is not None:                            # back to local (orange) once Claude is done
-            self.orb.set_state("local")
+            from PyObjCTools import AppHelper
+            AppHelper.callAfter(lambda: self.orb and self.orb.set_state("local"))   # main thread (CoreAnimation)
         if self.panel is not None:
             self.panel.set_status("")
 

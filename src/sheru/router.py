@@ -80,6 +80,8 @@ class Router:
         (re.compile(r"^(?:start|turn on|enable|resume)\s+recording\b.*"), "rec_on"),
         (re.compile(r"^(?:stop|pause|halt)\s+(?:the\s+|this\s+|that\s+|my\s+)?(?:music|song|playback|track|video|audio)\b.*$"), "media_pause"),
         (re.compile(r"^(?:stop|cancel|never ?mind|shut up|quiet|enough)\b|^that'?s enough\b|^okay,? that'?s enough\b"), "stop"),
+        # natural ways to END the conversation — a brief warm ack, and NO follow-up armed so the mic loop stops
+        (re.compile(r"^(?:no(?:pe)?|no thanks|no thank you|nothing(?:\s+else)?|that(?:'?s| is| will be| would be) (?:all|it|everything)|i'?m (?:good|done|fine|set|all set)|all good|we'?re good|that (?:will|would) be all|thank you(?:\s+sheru)?|thanks(?:\s+sheru)?|thanks a lot|thank you so much|bye(?:\s+sheru)?|goodbye|see (?:you|ya)|good ?night(?:\s+sheru)?)[.! ]*$"), "end_convo"),
         (re.compile(r"^(?:that (?:was|is)\s+|you (?:did|were)\s+)?(?:very |really |so )?(good|great|perfect|nice|excellent|awesome|well done|correct)\b\.?$"), "feedback_good"),
         (re.compile(r"^(?:that (?:was|is)\s+|you (?:did|were)\s+)?(?:very |really |so )?(bad|wrong|terrible|awful|nope|useless|not good)\b\.?$"), "feedback_bad"),
         (re.compile(r"^(?:set ?up|configure|connect|run setup|start setup)(?:\s+(?:my\s+)?(?:spotify|permissions?|access|sheru|everything|you))?\b.*$"), "setup"),
@@ -202,6 +204,9 @@ class Router:
         g = m.groups()
         if kind == "stop":
             return Result("")
+        if kind == "end_convo":                            # a warm sign-off; no follow-up -> the mic loop ends
+            import random
+            return Result(random.choice(["Anytime.", "Sure thing.", "You got it.", "Happy to help.", "Okay!"]))
         if kind == "feedback_good":
             strong = bool(re.search(r"\bvery\b|\bperfect\b|\bexcellent\b|\bawesome\b", m.group(0)))
             return Result("Awesome, thanks!" if strong else "Thanks!", feedback="positive-strong" if strong else "positive")
