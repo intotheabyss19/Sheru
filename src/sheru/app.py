@@ -1065,11 +1065,17 @@ def run_menubar(app: Sheru) -> None:
 
     class SheruApp(rumps.App):
         def __init__(self):
-            import rumps
+            import rumps, os
             from . import config, alarms
-            # a lion emoji title is ALWAYS visible in the menu bar (Sheru = sher/lion); the template PNG rendered
-            # as a near-invisible tinted shape, so the icon looked "missing".
-            super().__init__("Sheru", title="🦁", quit_button=None)
+            # Yash's preferred menu-bar mark: the waveform template PNG (black silhouette + alpha -> renders crisp,
+            # auto-inverts for light/dark). Set as the ICON so it's ALWAYS visible; the title is left free for the
+            # alarm badge. Earlier "missing icon" was really the _refresh_alarms bug that set title=None with no icon.
+            _icon = str(config.ROOT / "assets" / "menubar.png")
+            self._has_icon = os.path.exists(_icon)
+            if self._has_icon:
+                super().__init__("Sheru", icon=_icon, template=True, quit_button=None)
+            else:
+                super().__init__("Sheru", title="🦁", quit_button=None)
             self._alarm_item = rumps.MenuItem("⏰ Alarms: none", callback=lambda _: app.show_alarms())
             self._stop_item = rumps.MenuItem("🔔 Stop ringing", callback=lambda _: alarms.stop_ring())
             # fixed 2-voice toggle (Sarvam cloud / local Kokoro) — a GUI option, not a voice command
@@ -1144,7 +1150,9 @@ def run_menubar(app: Sheru) -> None:
                 from . import alarms
                 act = alarms.active()
                 ringing = alarms.is_ringing()
-                self.title = "🔔" if ringing else ("⏰" if act else None)
+                # title is just the alarm badge; the waveform ICON stays visible under it. Only fall back to a
+                # 🦁 title (never None) when there's no icon, else the menu-bar item would vanish.
+                self.title = "🔔" if ringing else ("⏰" if act else (None if self._has_icon else "🦁"))
                 if ringing:
                     self._alarm_item.title = "🔔 Alarm ringing — press Stop below"
                 elif act:

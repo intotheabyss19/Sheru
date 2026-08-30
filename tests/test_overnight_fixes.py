@@ -122,6 +122,15 @@ check("'give satya a call' -> call intent", r.route("give satya a call").call is
 check("'call claude' is NOT a call", r.route("call claude").call is None)
 check("'call it a day' is NOT a call", r.route("call it a day").call is None)
 
+print("volume — '%' symbol (Whisper writes 'percent' as '%') routes to the tool, not the LLM:")
+check("'set volume to 20%' -> volume tool (tier 0)", r.route("set volume to 20%").tool == "volume")
+check("'volume 20%' -> volume tool", r.route("volume 20%").tool == "volume")
+check("'set volume to 50 percent' -> volume tool", r.route("set volume to 50 percent").tool == "volume")
+check("'increase the volume by 30%' -> volume_by (tier 0)", r.route("increase the volume by 30%").tool == "volume_by")
+check("'reduce the volume by 20%' -> volume_by", r.route("reduce the volume by 20%").tool == "volume_by")
+check("'lower the volume by 10%' -> volume_by", r.route("lower the volume by 10%").tool == "volume_by")
+check("'set volume to 20%' NOT escalated to Claude", r.route("set volume to 20%").tier == 0)
+
 print("typing/dictation mode — routing + disable-phrase detection:")
 import re as _re
 _t1 = r.route("open Gaurav's chat and activate typing mode")

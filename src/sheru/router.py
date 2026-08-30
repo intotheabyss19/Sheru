@@ -147,6 +147,7 @@ class Router:
         (re.compile(r"^(?:pull up|bring up)\s+(?:https?://)?((?:[\w-]+\.)+[a-z]{2,}(?:/\S*)?)$"), "url"),
         (re.compile(r"^(?:search|google|look up|look for|find)\s+(?:for\s+)?(.+?)(?:\s+on\s+(google|duck ?duck ?go|bing))?$"), "search"),
         (re.compile(r"^(?:set\s+)?(?:the\s+)?volume\s+(?:to\s+)?(\d{1,3})(?:\s*percent)?$"), "volume"),
+        (re.compile(r"^(increase|raise|bump|boost|decrease|reduce|lower|drop|turn up|turn down)\s+(?:the\s+)?(?:volume|sound|audio)\s+(?:up\s+|down\s+|further\s+)?(?:by\s+)?(\d{1,3})(?:\s*percent)?$"), "volume_by"),
         (re.compile(r"^(?:turn\s+(?:it\s+)?|volume\s+)?(up|down)(?:\s+the\s+(?:volume|sound|music|audio))?$|^(?:turn\s+)?(?:the\s+)?(?:volume|sound|music|audio)\s+(up|down)$|^make\s+it\s+(louder|quieter|softer|lower|loud|quiet|soft|low)$"), "volume_delta"),
         (re.compile(r"^(mute|unmute)\b"), "mute"),
         (re.compile(r"^(play|pause|resume|next|skip|previous|back)(?:\s+(?:song|track|music))?$"), "media"),
@@ -195,9 +196,10 @@ class Router:
         if v is not None:
             self._last_calc = v                          # remember for continued calc ('times 2', 'plus 10', 'add 5 to that')
             return Result(calc.speak_result(v), tool="calc", followup=True)
-        if re.match(r"^(?:set\s+|turn\s+)?(?:the\s+)?(?:volume|brightness|sound)\b", t):
+        if re.search(r"\b(?:volume|brightness|sound|audio)\b", t) and len(t) < 60:   # a device command, not a message
             from .numwords import replace_number_words     # 'set volume to twenty' -> '... 20' (device cmds only)
             t = replace_number_words(t)
+            t = re.sub(r"\s*%", " percent", t)             # Whisper writes 'percent' as '%'; the grammar wants the word
         for pat, kind in self.RULES:
             m = pat.match(t)
             if m:
@@ -334,6 +336,10 @@ class Router:
         if kind == "volume_delta":
             d = next(x for x in g if x)
             return Result(system.change_volume(15 if d in ("up", "loud", "louder") else -15))
+        if kind == "volume_by":
+            verb, amt = g[0], int(g[1])
+            down = verb in ("decrease", "reduce", "lower", "drop", "turn down")
+            return Result(system.change_volume(-amt if down else amt))
         if kind == "media_pause":
             return Result(system.media("pause"))
         if kind == "mute":

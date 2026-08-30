@@ -22,6 +22,7 @@ from . import config
 
 _log = logging.getLogger("sheru.audio")
 BLOCK = 512  # 32 ms @ 16 kHz — Silero's native window
+_LOGGED_DEV = "\0"   # last input device we logged (sentinel != any real index/None)
 
 
 @dataclass
@@ -121,21 +122,30 @@ def list_input_devices() -> list[tuple[int, str]]:
     return out
 
 
+def _builtin_index(devs):
+    for i, name in devs:
+        if any(k in name.lower() for k in ("macbook", "built-in", "built in", "internal")):
+            return i
+    return None
+
+
 def preferred_device():
-    """Which input device to open: the user's saved choice (config.MIC_DEVICE = index or name substring), else
-    the built-in MacBook mic (best voice isolation / noise rejection), else the system default (None)."""
-    pref = config.MIC_DEVICE
+    """Which input device to open. Yash's rule: ALWAYS use the MacBook's built-in mic when it exists — it isolates
+    the voice far better than his headset, which picks up room noise (garbling STT). The built-in wins over any
+    saved choice; an explicit override is only honoured when NO built-in mic is present. Falls back to the system
+    default (None) on a machine with no built-in mic and no valid saved choice."""
     devs = list_input_devices()
+    builtin = _builtin_index(devs)
+    if builtin is not None:
+        return builtin
+    pref = config.MIC_DEVICE                                   # no built-in mic here -> honour a saved choice
     if pref not in (None, ""):
         try:
-            return int(pref)                                   # an explicit device index
+            return int(pref)
         except (ValueError, TypeError):
             for i, name in devs:
                 if str(pref).lower() in name.lower():
                     return i
-    for i, name in devs:                                       # auto: prefer the built-in mic
-        if any(k in name.lower() for k in ("macbook", "built-in", "built in", "internal")):
-            return i
     return None
 
 
@@ -165,6 +175,14 @@ def capture_once(max_wait: float = 8.0, cfg: "ListenerConfig | None" = None) -> 
     import os
     gain = float(os.environ.get("SHERU_MIC_GAIN", "4.0"))   # boosts ONLY the VAD's copy, not the STT audio
     dev = cfg.device if cfg.device is not None else preferred_device()   # honour the chosen mic (was ignored -> built-in)
+    global _LOGGED_DEV
+    if dev != _LOGGED_DEV:                                                # log the mic once (and on any change)
+        try:
+            _LOGGED_DEV = dev
+            _log.info("mic: capturing on device %s (%s)", dev,
+                      sd.query_devices(dev)["name"] if dev is not None else "system default")
+        except Exception:
+            pass
     stream = sd.InputStream(samplerate=config.SAMPLE_RATE, channels=1, dtype="float32",
                             blocksize=BLOCK, device=dev, callback=_cb)
     stream.start()
