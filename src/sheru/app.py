@@ -1142,6 +1142,18 @@ def main(argv=None) -> int:
             return 0
         except OSError:
             print("Sheru isn't running."); return 1
+    # single-instance guard: if a Sheru is already running (its trigger socket accepts a connection), just ACTIVATE
+    # it and exit — don't start a duplicate that fights over the mic + hotkey (looked like a crash / 'won't restart').
+    if not a.text and not a.listen:
+        import socket as _sk
+        from . import config as _cfg
+        try:
+            _c = _sk.socket(_sk.AF_UNIX, _sk.SOCK_STREAM)
+            _c.connect(str(_cfg.DATA_DIR / "sheru.sock")); _c.close()
+            print("Sheru is already running — activated it. (Quit it from the menu bar first to fully restart.)")
+            return 0
+        except OSError:
+            pass                                   # nothing listening (fresh start or a stale socket) -> proceed
     logging.basicConfig(level=logging.DEBUG if a.verbose else logging.INFO, format="%(asctime)s %(name)s %(message)s", force=True)
     for noisy in ("httpx", "httpcore", "urllib3", "filelock", "huggingface_hub"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
