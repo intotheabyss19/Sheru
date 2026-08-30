@@ -122,6 +122,12 @@ check("'give satya a call' -> call intent", r.route("give satya a call").call is
 check("'call claude' is NOT a call", r.route("call claude").call is None)
 check("'call it a day' is NOT a call", r.route("call it a day").call is None)
 
+print("tts — phonemizer language-switch fix (names like 'Satya' don't become gibberish):")
+from sheru.tts import _patch_phonemizer_language_switch
+_patch_phonemizer_language_switch()
+import phonemizer.backend as _pb
+check("phonemizer patched to remove-flags", getattr(_pb.EspeakBackend, "_sheru_no_lang_switch", False) is True)
+
 print(f"\n{'ALL PASS' if not fails else str(len(fails)) + ' FAILED: ' + ', '.join(fails)}  "
       f"({'0' if not fails else len(fails)} of many)")
 sys.exit(1 if fails else 0)

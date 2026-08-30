@@ -15,6 +15,27 @@ _URL = re.compile(r"https?://\S+|www\.\S+")
 _EMOJI = re.compile("[\U0001F000-\U0001FAFF\U00002600-\U000027BF\U0001FA00-\U0001FAFF←-⇿⬀-⯿✀-➿]")
 
 
+def _patch_phonemizer_language_switch() -> None:
+    """Kokoro's English espeak fallback keeps language-switch flags for OOV words (names like 'Satya'), and
+    Kokoro then VOCALIZES those (hi)/(fr) markers as alien gibberish. misaki's EspeakG2P uses 'remove-flags'
+    but its EspeakFallback doesn't — so force every espeak backend to 'remove-flags'. Idempotent; run before
+    Kokoro loads (an already-built backend keeps its old policy)."""
+    try:
+        from phonemizer.backend import EspeakBackend
+        if getattr(EspeakBackend, "_sheru_no_lang_switch", False):
+            return
+        _orig = EspeakBackend.__init__
+
+        def _init(self, *a, **k):
+            k.setdefault("language_switch", "remove-flags")
+            return _orig(self, *a, **k)
+
+        EspeakBackend.__init__ = _init
+        EspeakBackend._sheru_no_lang_switch = True
+    except Exception:
+        pass
+
+
 def _for_speech(text: str) -> str:
     """Strip markdown/code/URLs/emoji so nothing reads as 'asterisk asterisk' — Claude & search replies are markdown."""
     t = re.sub(r"```.*?```", " ", text, flags=re.S)        # fenced code blocks
@@ -147,6 +168,7 @@ class Speaker:
 
     def _ensure_kokoro(self):
         if self._kokoro is None:
+            _patch_phonemizer_language_switch()      # MUST run before Kokoro's g2p backend is built
             from mlx_audio.tts.utils import load_model
             from . import mlx_pool
             self._kokoro = mlx_pool.run(load_model, config.KOKORO_MODEL)
