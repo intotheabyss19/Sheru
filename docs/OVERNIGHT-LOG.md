@@ -175,3 +175,16 @@ queued Shortcuts items are now built** (run-shortcut bridge · Focus/DND · wind
 Deliberately left for later (both need setup I can't do or safely test at night): **OCR** ("read this screen" via a
 Extract-Text-from-Image shortcut) and **proactive automations** (battery/time/app triggers). Say the word when
 you're up and I'll wire those too.
+
+**04:20–05:00 — reliability audit + fixes.** Ran a deep adversarial audit of the routing / voice-loop / escalation
+paths (the "conversation dropped / misrouted" complaints). It confirmed escalation/failure handling is solid but
+found real bugs — fixed 6: (1) greedy weather/news rules swallowed "remind me to check the weather" and "text mom
+the weather looks bad" → messaging/reminders now fall through; (2) **any handler crash silently killed the voice
+loop** (mic just closed) → now caught, speaks a brief error, loop survives — this likely explains most "it just
+stopped" moments; (3) a pending message draft folded the next unrelated command into itself ("actually play music"
+re-drafted) and a stale draft hijacked the first command after a restart → added a new-intent escape; (4) a Claude
+answer with no stream deltas could "succeed" silently → now speaks the final answer; (5) local-LLM actions logged
+`tool=None` and could re-open the mic after a fire-and-forget action (echo risk) → fixed; (6) "stop it"/"stop that"
+now cancel an in-flight Claude turn. All regression-tested, Sheru restarted. **Left for you (low, needs judgement):**
+a resolved-song turn doesn't re-open the mic for a follow-up (minor); pressing F5 mid-Claude-turn can orphan the
+old `claude -p` process (uncommon).
