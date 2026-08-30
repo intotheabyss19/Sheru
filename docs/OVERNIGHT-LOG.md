@@ -132,3 +132,13 @@ In the **Shortcuts app**, name each exactly — full steps in `docs/SHORTCUTS-IN
 Until then, Sheru tells you exactly which shortcut to create instead of failing. And **run any shortcut you already
 have** with "run shortcut &lt;name&gt;" — no setup needed. (Bluetooth toggle skipped — it's not a Shortcuts action and
 needs a CLI I won't install unprompted.)
+
+**03:05–03:50 — hardening + cleanup.** Ran an adversarial code review over tonight's changes; it found and I fixed 5
+real bugs: (1) "what's my focus" always said "not in any focus" — the shortcut CLI's `-o -` output flag was wrongly
+tied to `-i -`, so input-less query shortcuts never returned anything (now always captures output); (2) a loose
+shortcut-name match could fire the WRONG (possibly destructive) shortcut unconfirmed → tightened to exact/near-exact
+only; (3) "stop do not disturb"/"stop focus" were swallowed by the generic "stop" rule → added a lookahead; (4) the
+volume/brightness preprocessing could rewrite number-words inside a message body ("…needs thirty chairs" → "30") →
+now skips messaging commands; (5) brightness now clamps 0–100. All regression-tested. **Also cleaned up test
+side-effects** (I'd been running real `route()` calls that played Spotify + opened YouTube videos in Brave — paused
+Spotify, quit Brave; captured the lesson so it stops). Sheru restarted on the fixed code, healthy.
