@@ -71,3 +71,41 @@ You left an 8-item list and said "continue working on all features, I'll be back
 
 ### ⚠️ One thing needs YOU (30 seconds)
 Typing mode, the F5 hotkey, and WhatsApp call/automation all need **Accessibility** (and Automation) granted to **Sheru.app** — a fresh grant because the packaged app is a different identity from the terminal. Click the menu-bar 🦁 → **🔓 Grant Permissions**, then toggle **Sheru** on under Accessibility (and allow the Automation prompts). Until then those features silently do nothing. Everything else works without it.
+
+---
+
+## Late session — Aug 30 night → Aug 31 (~21:00–02:45) — Shortcuts, menu bar, auto-start, fine-tune
+
+You asked me to keep going after the punch list: research Shortcuts, fix a few things you hit, make the menu-bar
+icon good + persistent + auto-starting, and retry the fine-tune. All done. Sheru is **up on the base model** with the
+**✦ sparkles** menu-bar icon, auto-starting at login.
+
+| Start | End | What I did | Result |
+|---|---|---|---|
+| 21:00 | 21:30 | **Shortcuts integration** (from the link you shared): inventoried macOS Shortcuts, and queued a build spec — a `run_shortcut` bridge (Sheru borrows ANY Shortcuts action), then Set Focus/DND by voice, window management, on-device OCR, and proactive automations. Native "Hey Sheru" wake word (Vocal Shortcuts → Siri, or Voice Control) documented as a deferred future item | Spec in `docs/SHORTCUTS-INTEGRATION.md` |
+| 21:30 | 22:15 | **Fixed the volume "%" bug** you hit: "set volume to 20%" was escalating to the LLM, which just *said* "done" without acting — the grammar only matched "percent" spelled out, not "%". Now normalizes % → percent + a new "increase/reduce by N%" rule. All volume commands stay tier-0 deterministic | Fixed + regression tests |
+| 22:15 | 22:30 | **Mic locked to the built-in MacBook mic** over your headset (the headset picks up room noise and garbles STT). Logs the chosen device so it's verifiable | Built-in enforced |
+| 22:30 | 00:40 | **Menu-bar icon**: you disliked the 🦁 emoji and it kept vanishing. Root-caused two bugs — a 2-second alarm timer set the title to `None` (wiped it), and deeper, `/Applications/Sheru.app` runs a python *outside* its bundle so macOS treats the process as faceless and collapses the status item to zero height. Showed you white shape-only **SF Symbol** options; you picked **✦ sparkles** (native, theme-adapting) | Sparkles chosen, config-driven |
+| 00:40 | 01:20 | **Durable auto-start**: installed a **LaunchAgent** that runs Sheru in your GUI session → the sparkles icon shows, it **auto-starts at login, survives restarts, and restarts on a crash** (honoring a clean Quit). Reproducible: `packaging/com.sheru.assistant.plist` + `install-autostart.sh` | Sparkles persists + auto-starts |
+| 01:20 | 02:45 | **Fine-tune retry** (your ask): distilled **150 real utterances via Claude** + a 278-example seed → **397 train / 44 valid** (bigger + more diverse than last night); made the eval-gate **honest** (excludes the held-out battery from training so an overfit adapter can't cheat); trained a LoRA on the **2507 base** (gentle LR 5e-5, checkpoints every 50); eval-gated base vs every checkpoint | **KEPT BASE** — see below |
+
+### Fine-tune result — KEPT BASE (the eval-gate did its job)
+| Model | Overall (held-out battery) | Chat-neg (must stay clean) |
+|---|---|---|
+| **BASE (Qwen3-4B-Instruct-2507)** | **32/38 (84%)** ✅ deployed | 6/6 |
+| LoRA ckpt 50 / 100 / final | 6/38 (collapsed) | 6/6 |
+| LoRA ckpt 200 (best adapter) | 29/38 | 6/6 |
+
+The LoRA overfits the narrow router task almost instantly (val loss → 0.03 by iter 50) and then **generalizes terribly
+to the held-out battery** — most checkpoints collapse to outputting no tool call at all. Every adapter scored **below**
+base, so I kept base (`config.LOCAL_ADAPTER = None`). This is the same, correct outcome as last night: the base 2507 is
+already strong, and fine-tuning a small narrow-task dataset doesn't beat it. **The durable win tonight is the honest,
+bigger dataset + gated pipeline** (`data/finetune/`, gitignored) for future attempts — not a winning adapter. To actually
+beat base would likely need a much larger, more diverse corpus (thousands of real labeled utterances) or a different
+target than tool-call memorization.
+
+### ⚠️ Needs YOU (30 seconds) — permissions moved
+Sheru now runs as a **login agent** (a fresh macOS permission identity, not the old `.app`). So re-grant, once:
+**Accessibility** + **Automation** (F5 hotkey, typing mode, WhatsApp auto-send) and **Microphone** (first F5 will prompt) —
+via the menu-bar **✦ → 🔓 Grant Permissions**, or just approve the macOS prompts. Leave the "background item" enabled in
+System Settings → Login Items. Everything else works without it.
