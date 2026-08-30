@@ -974,8 +974,9 @@ def run_menubar(app: Sheru) -> None:
         def __init__(self):
             import rumps
             from . import config, alarms
-            icon = str(config.ROOT / "assets" / "menubar.png")
-            super().__init__("Sheru", icon=icon, template=True, quit_button=None)
+            # a lion emoji title is ALWAYS visible in the menu bar (Sheru = sher/lion); the template PNG rendered
+            # as a near-invisible tinted shape, so the icon looked "missing".
+            super().__init__("Sheru", title="🦁", quit_button=None)
             self._alarm_item = rumps.MenuItem("⏰ Alarms: none", callback=lambda _: app.show_alarms())
             self._stop_item = rumps.MenuItem("🔔 Stop ringing", callback=lambda _: alarms.stop_ring())
             # fixed 2-voice toggle (Sarvam cloud / local Kokoro) — a GUI option, not a voice command
