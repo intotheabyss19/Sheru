@@ -3,6 +3,30 @@
 Autonomous session: improve Sheru + GUI, add personality, fix issues, test, research, fine-tune.
 Times are local. Newest at the bottom.
 
+---
+
+## 🌅 Aug 31 — latest session (read this first)
+**Sheru is live** on the base 2507 model with a **✦ sparkles** menu-bar icon that now **auto-starts at login and
+survives reboots** (runs as a LaunchAgent — the old `.app` couldn't show an icon due to a faceless-process bug).
+
+**What's new since last night:**
+- **Real bugs you hit — fixed:** "set volume to 20%" (the LLM was faking it; now actually sets it), "how do you
+  feel about me" (was a bogus YouTube "tutorial"), mic **locked to your built-in** over the headset.
+- **New system control:** **"run shortcut &lt;name&gt;"** runs any Shortcut · **Focus/DND** ("turn on do not disturb",
+  "set focus to work", "what's my focus") · **brightness** ("set brightness to 50", "dim the screen") · **window
+  management** ("maximize this window", "left half", "center this window" — works now, via Rectangle).
+- **Fine-tune retry:** bigger, honest dataset + fresh LoRA on 2507 → still overfit; **kept base** (84% vs adapter ≤76%).
+- **Self-reviewed** tonight's code and fixed 5 more bugs it found.
+
+**⚙️ Your ~2-minute setup to unlock the rest:**
+1. Menu-bar **✦ → 🔓 Grant Permissions** → enable Sheru under **Accessibility** + **Microphone** (it's a new
+   login-agent identity, so it re-asks). Without this the F5 hotkey / typing / auto-send stay off.
+2. In the **Shortcuts app**, create 4 shortcuts to power Focus + brightness by voice: `Sheru Set Focus`,
+   `Sheru Focus Off`, `Sheru Get Focus`, `Sheru Set Brightness` — exact steps in `docs/SHORTCUTS-INTEGRATION.md`.
+   (Window management + "run shortcut X" already work with no setup.)
+
+Full details + from-when-to-when tables below (newest at the bottom).
+
 ## TL;DR (good morning ☀️)
 - **Theme: made Sheru far more LOCAL-first** (your core success bar). Informational questions, currency,
   weather, news, "who/what is X", and changing stats (GDP/population) now answer **on-device** — verified
