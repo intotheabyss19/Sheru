@@ -3,6 +3,25 @@
 Autonomous session: improve Sheru + GUI, add personality, fix issues, test, research, fine-tune.
 Times are local. Newest at the bottom.
 
+## TL;DR (good morning ☀️)
+- **Theme: made Sheru far more LOCAL-first** (your core success bar). Informational questions, currency,
+  weather, news, "who/what is X", and changing stats (GDP/population) now answer **on-device** — verified
+  6/6 real escalations from your usage log now resolve locally, no Claude.
+- **New on-device answerers**: exact FX (Frankfurter), weather (Open-Meteo + your location), news (Google
+  News RSS), Wikipedia — plus a DuckDuckGo-lite fallback so a blocked endpoint doesn't force a Claude call.
+- **Personality/pride** added to Sheru's system prompt (JARVIS-like, proud to be local).
+- **Bugs fixed** (all found by testing + a fresh code audit, all verified): calc hijacking "volume 20 percent";
+  spoken **number-words** ("five plus five", "convert hundred dollars") now work in calc/FX/volume; alarm/reminder
+  parsing ("7 in the morning", "half an hour", "quarter past 7"); reminders keeping context ("...at the store");
+  long answers cut off; **TTS no longer reads markdown/emoji aloud** ("asterisk asterisk").
+- **Fine-tune**: ran a local LoRA, built an eval-gate, **kept the base model** — the adapter overfit and would
+  have hurt (regressed chat + sent search to Claude). Details in `docs/FINETUNE-RESULT.md`. This is the correct,
+  honest outcome; a real (non-synthetic) dataset is the next step if you want to retry.
+- **Housekeeping**: Apache-2.0 license, ~18 focused commits on `overnight` (FF-merged to `main`, both pushed).
+  **Sheru is running on the base model with all fixes live.** Nothing left playing/open from testing.
+- **Try when you wake**: broken-English commands, "what's 100 dollars in rupees", "who is <someone>",
+  "what's the news", "set an alarm for 7 in the morning", "five times five", "remind me in half an hour".
+
 | Start | End | What I did | Result |
 |---|---|---|---|
 | 04:20 | 04:41 | Broken-English routing stress test (mocked, no real side effects) + fixes: 'stop the music' now pauses (was cancel), Hinglish 'bajao', 'make it loud'/'turn down sound', 'what time now', 'pics of X' | 6 misroutes fixed, no regressions |
