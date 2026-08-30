@@ -124,6 +124,10 @@ class Router:
         (re.compile(r".*\b(?:exchange rate|conversion rate)\b.*|.*\b\d+(?:\.\d+)?\s*(?:euros?|dollars?|pounds?|yen|rupees?|usd|eur|gbp|inr|jpy)\b.*\b(?:in|to|into)\b\s*(?:inr|usd|eur|gbp|jpy|rupees?|dollars?|euros?|pounds?|yen)\b.*"), "current"),
         (re.compile(r"^(?:search|look up|google|find)\s+(?:for\s+)?(.+?)\s+(?:and|then)\s+summari[sz]e.*$"), "search_summarize"),
         (re.compile(r"^summari[sz]e(?:\s+(?:me|it|that|this|them|the results|the search|those))?(?:\s+(.+))?$"), "summarize"),
+        # teach / play a Spotify PLAYLIST (before play_song, which would treat 'X playlist' as a track)
+        (re.compile(r"^(?:remember\s+)?(?:that\s+)?(?:my\s+)?(.+?)\s+playlist\s+is\s+(https?://\S+|spotify:\S+)$"), "remember_playlist"),
+        (re.compile(r"^remember\s+(?:my\s+|the\s+)?(.+?)\s+playlist\s+(https?://\S+|spotify:\S+)$"), "remember_playlist"),
+        (re.compile(r"^(?:play|put on|start|shuffle)\s+(?:my\s+|the\s+)?(.+?)\s+playlist(?:\s+(?:on|in|using)\s+spotify)?$"), "play_playlist"),
         (re.compile(r"^(?:play|put on|put)\s+(?:some\s+|the\s+|a\s+)?(?:song\s+|track\s+)?(.+?)(?:\s+(?:on|in|using)\s+spotify)?$"), "play_song"),
         (re.compile(r"^(.+?)\s+(?:bajao|baja\s?do|chalao|chala\s?do|sunao|suna\s?do|lagao)$"), "play_song"),   # Hinglish 'play X'
         (re.compile(r"^(?:crank|pump)\s+(?:it|the volume|music)?\s*up$"), "vol_up"),
@@ -160,6 +164,7 @@ class Router:
     ])
 
     def route(self, text: str) -> Result:
+        self._orig_text = text                 # case-preserved original (Spotify IDs, URLs are case-sensitive)
         t = re.sub(r"[.!?,]+$", "", text.strip().lower())
         t = re.sub(r"^(?:hey\s+)?sheru[,\s]*", "", t).strip()
         t = re.sub(r"\b([\w-]+)\s+dot\s+(com|org|net|io|co|in|dev|app|ai|gov|edu)\b", r"\1.\2", t)
@@ -384,6 +389,20 @@ class Router:
             return Result(system.change_volume(15))
         if kind == "skip":
             return Result(system.media("next"))
+        if kind == "remember_playlist":
+            orig = getattr(self, "_orig_text", "") or ""      # link case matters — pull it from the original text
+            mlink = re.search(r"(https?://\S+|spotify:\S+)", orig)
+            uri = music.remember_playlist(g[0].strip(), mlink.group(0) if mlink else g[1].strip())
+            if uri:
+                return Result(f"Got it — I'll remember your {g[0].strip()} playlist.")
+            return Result("That didn't look like a Spotify playlist link. Paste the playlist's share link (Share → Copy link).")
+        if kind == "play_playlist":
+            name = g[0].strip()
+            r = music.play_playlist(name)
+            if r == "__NEED_PLAYLIST__":
+                return Result(f"I don't have your {name} playlist saved yet. What's its Spotify link? "
+                              f"Say: '{name} playlist is <paste the link>'.", followup=True)
+            return Result(r, followup=True)
         if kind == "play_song":
             q = g[0].strip()
             if q in {"music", "the music", "song", "a song", "some music", "something", "it", "the song"}:

@@ -114,3 +114,55 @@ def play_song(query: str) -> str:
     if hit:
         return _play_uri(hit[0], hit[1])
     return "__RESOLVE_WITH_CLAUDE__"    # signal: router/app should delegate resolution to Claude
+
+
+# ── playlists (AppleScript plays a playlist URI directly — no Spotify login needed; Sheru just needs the URI,
+#    which it learns once from a share link) ─────────────────────────────────────────────────────────────────
+import re
+
+_PLAYLISTS = config.DATA_DIR / "playlists.json"
+
+
+def _load_playlists() -> dict:
+    try:
+        return json.loads(_PLAYLISTS.read_text())
+    except Exception:
+        return {}
+
+
+def _playlist_uri(link: str) -> str | None:
+    """spotify:playlist:ID from a share link (https://open.spotify.com/playlist/ID?..) or a URI."""
+    m = re.search(r"playlist[:/]([A-Za-z0-9]{22})", link or "")
+    return f"spotify:playlist:{m.group(1)}" if m else None
+
+
+def remember_playlist(name: str, link: str) -> str | None:
+    """Teach Sheru a playlist: name -> URI, stored in data/playlists.json. Returns the URI or None."""
+    uri = _playlist_uri(link)
+    if not uri:
+        return None
+    d = _load_playlists()
+    d[name.strip().lower()] = uri
+    config.DATA_DIR.mkdir(parents=True, exist_ok=True)
+    _PLAYLISTS.write_text(json.dumps(d, ensure_ascii=False))
+    return uri
+
+
+def play_playlist(name: str) -> str:
+    """Play a taught playlist via AppleScript (no login). '__NEED_PLAYLIST__' if it isn't known yet."""
+    d = _load_playlists()
+    key = name.strip().lower()
+    uri = d.get(key)
+    if uri is None and d:                        # fuzzy: 'bhajan'/'my bhajans' -> the saved 'bhajans'
+        try:
+            from rapidfuzz import fuzz
+            best = max(d, key=lambda k: fuzz.partial_ratio(key, k))
+            if fuzz.partial_ratio(key, best) >= 70:
+                uri, key = d[best], best
+        except Exception:
+            pass
+    if uri is None:
+        return "__NEED_PLAYLIST__"
+    subprocess.run(["open", "-g", "-a", "Spotify"], check=False)
+    subprocess.run(["osascript", "-e", f'tell application "Spotify" to play track "{uri}"'], capture_output=True)
+    return f"Playing your {key} playlist on Spotify."
