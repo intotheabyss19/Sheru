@@ -40,7 +40,7 @@ def update_profile(key: str, value) -> None:
 
 SAMPLE_RATE = 16_000
 WAKE_WORDS = ("hey sheru", "sheru")
-LOCAL_LLM = os.environ.get("SHERU_LLM") or _P.get("llm_model") or "mlx-community/Qwen3-4B-4bit"   # resident tier. 4B routes as well as 8B (verified) and is snappier; set profile 'llm_model' or SHERU_LLM=mlx-community/Qwen3-8B-4bit for warmer chit-chat
+LOCAL_LLM = os.environ.get("SHERU_LLM") or _P.get("llm_model") or "mlx-community/Qwen3-4B-Instruct-2507-4bit"   # resident tier. Instruct-2507 4B beats base 4B on tool-routing (84% vs 79% on our eval) at the SAME ~2.5GB/speed; 8B only warmer chit-chat at 2x RAM (freezes on 16GB). Override via profile 'llm_model' / SHERU_LLM.
 LOCAL_LLM_FAST = os.environ.get("SHERU_LLM_FAST") or None                       # optional light tier; set to e.g. mlx-community/Qwen3-4B-4bit
 LOCAL_ADAPTER = os.environ.get("SHERU_ADAPTER") or _P.get("llm_adapter") or None  # optional LoRA adapter dir served on top of LOCAL_LLM (no fuse); set by fine-tuning once it beats base
 # STT backend: "parakeet" (fast, English/European only), "whisper" (Hindi + English + Hinglish, slower, local),
