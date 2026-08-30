@@ -5,10 +5,32 @@ real Hindi + 10 other Indian languages). Both degrade to AVSpeech on any failure
 from __future__ import annotations
 
 import queue
+import re
 import subprocess
 import threading
 
 from . import config
+
+_URL = re.compile(r"https?://\S+|www\.\S+")
+_EMOJI = re.compile("[\U0001F000-\U0001FAFF\U00002600-\U000027BF\U0001FA00-\U0001FAFF←-⇿⬀-⯿✀-➿]")
+
+
+def _for_speech(text: str) -> str:
+    """Strip markdown/code/URLs/emoji so nothing reads as 'asterisk asterisk' — Claude & search replies are markdown."""
+    t = re.sub(r"```.*?```", " ", text, flags=re.S)        # fenced code blocks
+    t = t.replace("`", "")                                 # inline code backticks
+    t = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", t)       # [text](url) / image -> text
+    t = _URL.sub("a link", t)                              # bare URLs
+    t = re.sub(r"\*+([^*]+)\*+", r"\1", t)                 # *italic* / **bold** -> inner text
+    t = t.replace("*", "")                                 # stray asterisks / bullets
+    t = re.sub(r"(?m)^\s{0,3}#{1,6}\s*", "", t)            # leading markdown headings (keep inline C#, #1)
+    t = re.sub(r"(?m)^\s*[-•>]\s+", "", t)                 # bullet / blockquote markers
+    t = re.sub(r"(?m)^\s*\d+\.\s+", "", t)                 # numbered-list markers
+    t = t.replace("|", " ")                                # table pipes
+    t = _EMOJI.sub("", t)
+    t = re.sub(r"[ \t]+", " ", t)
+    t = re.sub(r"\n{2,}", ". ", t).strip()
+    return t
 
 try:  # pyobjc
     from AVFoundation import (
@@ -61,7 +83,7 @@ class Speaker:
     def speak(self, text: str, wait: bool = False) -> None:
         """Enqueue text to be spoken. A streamed reply arrives as many speak() calls; queuing plays them in
         order instead of each one interrupting the last (which left only the final fragment audible)."""
-        text = text.strip()
+        text = _for_speech(text)
         if not text:
             return
         self._ensure_worker()
