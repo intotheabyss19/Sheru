@@ -594,10 +594,10 @@ class Sheru:
         import math
         import time as _t
         if self.orb is not None:
-            # gentle idle "breathing" floor so the orb is ALWAYS visibly present through the whole exchange —
-            # listening, Sheru speaking (mic closed -> level 0), and your-turn — never collapsing to nothing.
-            idle = 0.14 + 0.05 * (0.5 + 0.5 * math.sin(_t.monotonic() * 2.2))
-            self.orb.set_level(max(audio.LEVEL["v"], idle))
+            # gentle idle "breathing" so the orb is ALWAYS visibly present (listening, Sheru speaking, your-turn),
+            # PLUS your voice grows it on top — amplified, because the built-in mic runs quiet (peak ~0.05).
+            idle = 0.10 + 0.04 * (0.5 + 0.5 * math.sin(_t.monotonic() * 2.2))
+            self.orb.set_level(min(1.0, idle + audio.LEVEL["v"] * 5.0))
 
     def _stop_orb_driver(self) -> None:
         t = self._orb_timer
