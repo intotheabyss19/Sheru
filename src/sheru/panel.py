@@ -15,7 +15,8 @@ from typing import Callable
 import objc
 from AppKit import (
     NSPanel, NSTextField, NSScrollView, NSBox, NSColor, NSFont, NSApp, NSButton, NSView,
-    NSVisualEffectView, NSAttributedString, NSFontAttributeName, NSForegroundColorAttributeName,
+    NSVisualEffectView, NSAttributedString, NSMutableAttributedString, NSSearchField,
+    NSFontAttributeName, NSForegroundColorAttributeName,
     NSEvent, NSEventMaskLeftMouseDown, NSEventMaskRightMouseDown,
     NSWindowStyleMaskBorderless, NSWindowStyleMaskNonactivatingPanel,
     NSFloatingWindowLevel, NSWindowCollectionBehaviorCanJoinAllSpaces,
@@ -108,6 +109,13 @@ class TypePanel(NSObject):
         self._sw_t0 = None
         self._dots = 0                     # animation phase for typing dots
         self._next_src = "local"
+        self._hist = None                  # history overlay view
+        self._hist_provider = None         # (query) -> [session dicts]
+        self._hist_open = None             # (id) -> load that conversation
+        self._hist_star = None             # (id) -> toggle star, returns new state
+        self._hist_search = None
+        self._hist_doc = None
+        self._viewing = False              # True while viewing a past conversation
         return self
 
     @objc.python_method
@@ -592,6 +600,165 @@ class TypePanel(NSObject):
             if "On-device" in s or "Claude" in s:
                 self._status.setStringValue_("")
 
+    # ---- history browser ------------------------------------------------------------
+    @objc.python_method
+    def show_history(self, list_provider, on_open, on_toggle_star):
+        """Open the panel showing a searchable list of past conversations. `list_provider(query)` returns
+        session dicts {id,label,title,starred,n}; on_open(id) loads one; on_toggle_star(id) stars it."""
+        self._hist_provider = list_provider
+        self._hist_open = on_open
+        self._hist_star = on_toggle_star
+
+        def do():
+            if self._panel is None:
+                self._build()
+            self._live = False
+            self._seed_chat()
+            NSApp.activateIgnoringOtherApps_(True)
+            self._panel.makeKeyAndOrderFront_(None)
+            self._panel.orderFrontRegardless()
+            self._install_click_monitor()
+            self._open_history()
+        AppHelper.callAfter(do)
+
+    @objc.python_method
+    def _open_history(self):
+        self._close_history()
+        self._clear_card()
+        cw = W - 2 * PAD
+        top = H - PAD - INPUT_H - 20
+        bottom = PAD + 6
+        ch = top - bottom
+        ov = NSView.alloc().initWithFrame_(NSMakeRect(PAD, bottom, cw, ch))
+        ov.setAutoresizingMask_(NSViewWidthSizable | NSViewHeightSizable)
+
+        sf = NSSearchField.alloc().initWithFrame_(NSMakeRect(0, ch - 34, cw, 30))
+        sf.setFont_(NSFont.systemFontOfSize_(14))
+        sf.setPlaceholderString_("Search conversations…")
+        sf.setFocusRingType_(NSFocusRingTypeNone)
+        sf.setDelegate_(self)
+        sf.setAutoresizingMask_(NSViewWidthSizable | NSViewMinYMargin)
+        ov.addSubview_(sf)
+        self._hist_search = sf
+
+        sc = NSScrollView.alloc().initWithFrame_(NSMakeRect(0, 0, cw, ch - 42))
+        sc.setHasVerticalScroller_(True); sc.setAutohidesScrollers_(True); sc.setDrawsBackground_(False)
+        sc.setAutoresizingMask_(NSViewWidthSizable | NSViewHeightSizable)
+        doc = _Flipped.alloc().initWithFrame_(NSMakeRect(0, 0, cw, ch - 42))
+        doc.setAutoresizingMask_(NSViewWidthSizable)
+        sc.setDocumentView_(doc)
+        ov.addSubview_(sc)
+        self._hist_doc = doc
+        self._hist_scroll = sc
+
+        if self._scroll is not None:
+            self._scroll.setHidden_(True)
+        if self._quick is not None:
+            self._quick.setHidden_(True)
+        self._panel.contentView().addSubview_(ov)
+        self._hist = ov
+        self.set_status("History · Esc to go back")
+        self._render_history("")
+        self._panel.makeFirstResponder_(sf)
+
+    @objc.python_method
+    def _render_history(self, query):
+        doc = self._hist_doc
+        if doc is None:
+            return
+        for v in list(doc.subviews()):
+            v.removeFromSuperview()
+        cw = doc.frame().size.width
+        rows = []
+        try:
+            rows = self._hist_provider(query) if self._hist_provider else []
+        except Exception:
+            rows = []
+        ROW_H = 50
+        y = 4
+        if not rows:
+            lb = self._meta_label("No conversations." if not query else "No matches.",
+                                  NSColor.secondaryLabelColor(), 8, y, cw - 16, NSTextAlignmentLeft)
+            lb.setFont_(NSFont.systemFontOfSize_(13))
+            doc.addSubview_(lb)
+            y += 24
+        for r in rows:
+            doc.addSubview_(self._history_row(r, cw, y, ROW_H))
+            y += ROW_H
+        vis = self._hist_scroll.contentSize().height
+        doc.setFrameSize_(NSMakeSize(cw, max(y + 4, vis)))
+        doc.scrollRectToVisible_(NSMakeRect(0, 0, 1, 1))
+
+    @objc.python_method
+    def _history_row(self, r, cw, y, h):
+        row = NSView.alloc().initWithFrame_(NSMakeRect(0, y, cw, h - 6))
+        row.setWantsLayer_(True)
+        row.layer().setCornerRadius_(10.0)
+        row.layer().setBackgroundColor_(_rgba(1, 1, 1, 0.05).CGColor())
+
+        star = NSButton.alloc().initWithFrame_(NSMakeRect(6, (h - 6 - 28) / 2, 30, 28))
+        star.setBordered_(False); star.setTitle_("★" if r["starred"] else "☆")
+        star.setFont_(NSFont.systemFontOfSize_(17))
+        star.setContentTintColor_(GOLD if r["starred"] else NSColor.tertiaryLabelColor())
+        star.setTag_(int(r["id"])); star.setTarget_(self); star.setAction_("histStar:")
+        star.setToolTip_("Keep beyond a week" if not r["starred"] else "Starred — kept")
+        row.addSubview_(star)
+
+        opn = NSButton.alloc().initWithFrame_(NSMakeRect(38, 0, cw - 44, h - 6))
+        opn.setBordered_(False); opn.setImagePosition_(0)
+        title = NSMutableAttributedString.alloc().init()
+        head = f"{r['label']}   ·   {r['n']} turn{'s' if r['n'] != 1 else ''}\n"
+        title.appendAttributedString_(self._attr(head, NSColor.labelColor(), 13.5, 0.3))
+        title.appendAttributedString_(self._attr(r["title"] or "—", NSColor.secondaryLabelColor(), 11.5))
+        opn.setAttributedTitle_(title)
+        opn.setAlignment_(NSTextAlignmentLeft)
+        opn.cell().setLineBreakMode_(NSLineBreakByWordWrapping)
+        opn.cell().setWraps_(True)
+        opn.setTag_(int(r["id"])); opn.setTarget_(self); opn.setAction_("histOpen:")
+        row.addSubview_(opn)
+        return row
+
+    @objc.python_method
+    def _attr(self, text, color, size, weight=None):
+        font = NSFont.systemFontOfSize_(size) if weight is None else NSFont.systemFontOfSize_weight_(size, weight)
+        return NSAttributedString.alloc().initWithString_attributes_(
+            text, {NSFontAttributeName: font, NSForegroundColorAttributeName: color})
+
+    @objc.python_method
+    def _close_history(self):
+        if getattr(self, "_hist", None) is not None:
+            self._hist.removeFromSuperview()
+            self._hist = None
+            self._hist_doc = None
+            self._hist_search = None
+            if self._scroll is not None:
+                self._scroll.setHidden_(False)
+            if self._quick is not None:
+                self._quick.setHidden_(False)
+            self.set_status("")
+
+    def histOpen_(self, sender):
+        sid = sender.tag()
+        self._close_history()
+        if self._hist_open:
+            turns = self._hist_open(sid) or []
+            self._chat = list(turns)
+            self._viewing = True
+            self._render_chat()
+            self.set_status("Viewing a past conversation · Esc for live")
+            self._panel.makeFirstResponder_(self._field)
+
+    def histStar_(self, sender):
+        sid = sender.tag()
+        if self._hist_star:
+            self._hist_star(sid)
+        q = self._hist_search.stringValue() if self._hist_search is not None else ""
+        self._render_history(q)
+
+    def controlTextDidChange_(self, notif):
+        if self._hist_search is not None and notif.object() is self._hist_search:
+            self._render_history(self._hist_search.stringValue())
+
     # ---- submit ---------------------------------------------------------------------
     @objc.python_method
     def _submit(self, text: str):
@@ -615,6 +782,16 @@ class TypePanel(NSObject):
                 self._submit(text)
             return True
         if selector == "cancelOperation:":
+            if self._hist is not None:              # Esc in history -> back to the chat
+                self._close_history()
+                return True
+            if self._viewing:                       # Esc while viewing old history -> back to live
+                self._viewing = False
+                self._chat = []
+                self._seed_chat()
+                self._render_chat()
+                self.set_status("")
+                return True
             self.hide()
             return True
         return False
