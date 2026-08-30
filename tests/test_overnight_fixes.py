@@ -158,6 +158,13 @@ check("'maximize the screen brightness' -> brightness helper (was 'I can't')", r
 check("'set brightness to 50' -> brightness helper", r.route("set brightness to 50").tool == "focus")
 check("'dim the screen' -> brightness helper", r.route("dim the screen").tool == "focus")
 
+print("reliability audit fixes — weather/current no longer shadow message/remind:")
+check("'remind me to check the weather in an hour' -> remind (not weather)", r.route("remind me to check the weather in an hour").tool == "remind")
+check("'text mom the weather looks bad' -> message (not weather)", r.route("text mom the weather looks bad").tool == "message")
+check("'message dad who won the game' -> message (not current)", r.route("message dad who won the game").tool == "message")
+check("'whats the weather' still -> weather", r.route("whats the weather").tool == "weather")
+check("'what is the news today' still -> current", r.route("what is the news today").tool == "current")
+
 print("window management (via Rectangle) — routing:")
 check("'maximize this window' -> window", r.route("maximize this window").tool == "window")
 check("'make it full screen' -> window", r.route("make it full screen").tool == "window")

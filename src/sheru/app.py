@@ -92,7 +92,8 @@ class Sheru:
             sink("Let me try again…")
             self._resolve_and_play(q, sink)
             return "retry-song"
-        if self.claude.busy and text.strip().lower() in {"stop", "cancel", "never mind", "sheru stop"}:
+        if self.claude.busy and re.match(r"^(?:sheru\s+)?(?:stop|cancel|never ?mind|shut up|quiet|enough|that'?s enough)"
+                                         r"(?:\s+(?:it|that|now|please))?[.! ]*$", text.strip().lower()):
             self.claude.cancel()
             sink("Cancelled.")
             return "Cancelled."
@@ -398,6 +399,16 @@ class Sheru:
             self._save_pending()
             sink("Okay, I won't send it.")
             return "cancelled"
+        # NEW-INTENT escape: if this is clearly a DIFFERENT command (not a rewording of the message), drop the
+        # draft and run it — instead of folding "actually, play some music" into the message body. Also clears a
+        # stale draft restored after a restart so it can't hijack the first real command.
+        if re.match(r"^(?:play|open|launch|quit|close|stop|pause|skip|next|previous|resume|mute|unmute|volume|"
+                    r"set (?:the )?volume|turn (?:it |the )?(?:up|down|on|off)|what(?:'?s| is| time)|who is|"
+                    r"search|google|look up|call|ring|remind me|set (?:a|an|the) (?:timer|alarm)|brightness|dim|"
+                    r"maximi[sz]e|run shortcut|do not disturb|focus)\b", low):
+            self.pending = None
+            self._save_pending()
+            return self.handle_text(text, sink)     # route it fresh now that the draft is dropped (pending is None)
         # otherwise: treat as a rephrase instruction
         p["draft"] = compose.draft(self.llm, p["recipient"], p["gist"], revision=text, previous=p["draft"])
         p["ts"] = time.time()
@@ -538,7 +549,11 @@ class Sheru:
                 if cmd:
                     if self.panel is not None:
                         self.panel.push_user(cmd)          # show what Sheru HEARD in the chat (so you catch STT errors)
-                    self.handle_text(cmd, sink=self._say_both)
+                    try:
+                        self.handle_text(cmd, sink=self._say_both)
+                    except Exception as e:                 # a handler blowing up must NOT silently kill the loop
+                        log.exception("handle_text failed for %r", cmd)
+                        self._say_both("Sorry, something went wrong with that one.")
                 # GATE: don't re-open the mic until Sheru is COMPLETELY done — Claude finished AND every streamed
                 # sentence has finished playing — else it records its own voice, which starts a new turn that cuts
                 # the reply off. claude.busy stays True through a 'speak -> search -> speak more' answer, so this
@@ -1005,7 +1020,11 @@ class Sheru:
                 self.speaker.speak("Yes?")
                 self.allow_followup()
                 continue
-            self.handle_text(cmd)
+            try:
+                self.handle_text(cmd)
+            except Exception:                       # one bad handler must not kill the always-on listener for good
+                log.exception("handle_text failed for %r", cmd)
+                self.speaker.speak("Sorry, something went wrong with that one.")
 
 
 class _OnceTarget:

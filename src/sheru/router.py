@@ -139,10 +139,10 @@ class Router:
         (re.compile(r"^(?:switch|go|jump)\s+(?:over\s+)?(?:me\s+)?to\s+(?:the\s+)?(.+?)(?:\s+(?:app|application))?$"), "switch"),
         (re.compile(r"^(?:show|find|get|search for|google|look up)\s+(?:me\s+)?(?:some\s+|for\s+)?(?:\w+\s+)?(?:pictures?|images?|photos?|pics?)\s+of\s+(.+)$"), "images"),
         (re.compile(r"^(?:set my location to|my location is|i live in|i'?m based in|i just moved to|i'?m now (?:in|at)|i moved to)\s+(.+)$"), "set_location"),
-        (re.compile(r"^(?!play\b)(?!.*\bby\b).*\bweather\b.*"), "weather"),
-        (re.compile(r"^(?!play\b)(?!.*\bby\b).*\b(news|headlines?|stocks?|stock price|share price|bitcoin|crypto|ethereum|nasdaq|dow jones|who won|score of|election results?|prime minister|president of|forecast|is it (?:going to )?rain(?:ing)?|will it rain|need an umbrella|temperature (?:outside|right now)|what'?s happening|going on (?:in the world|with the)|current (?:price|events)|population of|gdp of|net worth of|market cap of|how many people (?:live|are) )\b.*"), "current"),
+        (re.compile(r"^(?!play\b)(?!.*\bby\b)(?!(?:message|text|msg|whats\s?app|send|remind me)\b).*\bweather\b.*"), "weather"),
+        (re.compile(r"^(?!play\b)(?!.*\bby\b)(?!(?:message|text|msg|whats\s?app|send|remind me)\b).*\b(news|headlines?|stocks?|stock price|share price|bitcoin|crypto|ethereum|nasdaq|dow jones|who won|score of|election results?|prime minister|president of|forecast|is it (?:going to )?rain(?:ing)?|will it rain|need an umbrella|temperature (?:outside|right now)|what'?s happening|going on (?:in the world|with the)|current (?:price|events)|population of|gdp of|net worth of|market cap of|how many people (?:live|are) )\b.*"), "current"),
         # currency conversion / exchange rate -> local search+summarize (was escalating to Claude)
-        (re.compile(r".*\b(?:exchange rate|conversion rate)\b.*|.*\b\d+(?:\.\d+)?\s*(?:euros?|dollars?|pounds?|yen|rupees?|usd|eur|gbp|inr|jpy)\b.*\b(?:in|to|into)\b\s*(?:inr|usd|eur|gbp|jpy|rupees?|dollars?|euros?|pounds?|yen)\b.*"), "current"),
+        (re.compile(r"^(?!(?:message|text|msg|whats\s?app|send|remind me)\b)(?:.*\b(?:exchange rate|conversion rate)\b.*|.*\b\d+(?:\.\d+)?\s*(?:euros?|dollars?|pounds?|yen|rupees?|usd|eur|gbp|inr|jpy)\b.*\b(?:in|to|into)\b\s*(?:inr|usd|eur|gbp|jpy|rupees?|dollars?|euros?|pounds?|yen)\b.*)"), "current"),
         (re.compile(r"^(?:search|look up|google|find)\s+(?:for\s+)?(.+?)\s+(?:and|then)\s+summari[sz]e.*$"), "search_summarize"),
         (re.compile(r"^summari[sz]e(?:\s+(?:me|it|that|this|them|the results|the search|those))?(?:\s+(.+))?$"), "summarize"),
         # 'how to X' / 'how do I X' -> a YouTube tutorial (NOT play_song; 'how to play raag yaman' isn't a track)
@@ -598,4 +598,4 @@ class Router:
             else:                      return Result("I'll ask Claude.", handoff=t, tier=2)
         except (KeyError, ValueError, TypeError):
             return Result("I'll ask Claude.", handoff=t, tier=2)
-        return Result(r, tier=1)
+        return Result(r, tier=1, tool=tool)     # carry the tool so FIRE_AND_FORGET (no echo re-arm) + the journal are correct

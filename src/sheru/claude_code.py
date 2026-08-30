@@ -70,7 +70,7 @@ class ClaudeSession:
             watchdog[0] = threading.Timer(max_seconds, _timeout)
             watchdog[0].daemon = True
             watchdog[0].start()
-            buf, final = "", ""
+            buf, final, spoke = "", "", False
             for line in self._proc.stdout:
                 try:
                     ev = json.loads(line)
@@ -82,7 +82,7 @@ class ClaudeSession:
                     if d.get("type") == "text_delta":
                         buf += d["text"]
                         while (m := _SENTENCE.match(buf)):
-                            on_sentence(m.group(1).strip()); buf = buf[m.end():]
+                            on_sentence(m.group(1).strip()); spoke = True; buf = buf[m.end():]
                 elif t == "result":
                     self.session_id = ev.get("session_id", self.session_id)
                     final = ev.get("result") or ""
@@ -90,7 +90,7 @@ class ClaudeSession:
                         errored[0] = final or ev.get("subtype") or "unknown error"
                         final = ""
             if buf.strip():
-                on_sentence(buf.strip())
+                on_sentence(buf.strip()); spoke = True
             if watchdog[0]:
                 watchdog[0].cancel()
             rc = self._proc.wait()
@@ -107,6 +107,8 @@ class ClaudeSession:
                     on_sentence("Claude Code ran into a problem.")
                 return
             self._proc = None
+            if not spoke and final.strip():         # streaming produced no audio -> speak the answer so it's never a silent "success"
+                on_sentence(final.strip())
             if on_done:
                 on_done(final)
 
