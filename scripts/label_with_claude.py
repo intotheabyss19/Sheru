@@ -141,16 +141,15 @@ def main():
             except Exception:
                 pass
     us = [u for u in _utterances(args) if u.lower() not in done][: args.limit]
-    labeled = []
-    for i, u in enumerate(us, 1):
-        d = _label(u, tool_lines, env, valid)
-        print(f"  [{i}/{len(us)}] {u[:44]:46} -> {(d['tool'] or 'say') if d else 'FAILED'}")
-        if d:
-            labeled.append(d)
-    with OUT.open("a") as f:
-        for d in labeled:
-            f.write(json.dumps(d, ensure_ascii=False) + "\n")
-    print(f"appended {len(labeled)}/{len(us)} labels -> {OUT.relative_to(ROOT)}")
+    n = 0
+    with OUT.open("a") as f:                             # append each label AS IT LANDS (crash-safe / resumable)
+        for i, u in enumerate(us, 1):
+            d = _label(u, tool_lines, env, valid)
+            print(f"  [{i}/{len(us)}] {u[:44]:46} -> {(d['tool'] or 'say') if d else 'FAILED'}", flush=True)
+            if d:
+                f.write(json.dumps(d, ensure_ascii=False) + "\n"); f.flush()
+                n += 1
+    print(f"appended {n}/{len(us)} labels -> {OUT.relative_to(ROOT)}")
 
 
 if __name__ == "__main__":

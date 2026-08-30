@@ -15,7 +15,7 @@ if pgrep -f '.venv/bin/sheru' >/dev/null; then
   [ "${FORCE:-0}" = "1" ] || exit 1
 fi
 
-MODEL="${SHERU_LLM:-mlx-community/Qwen3-4B-4bit}"
+MODEL="${SHERU_LLM:-mlx-community/Qwen3-4B-Instruct-2507-4bit}"
 DATA="data/finetune"
 ADAPTER="data/finetune/adapter"
 mkdir -p "$ADAPTER"
@@ -30,11 +30,11 @@ uv run python -m mlx_lm.lora \
   --num-layers "${LAYERS:-8}" \
   --max-seq-length "${SEQ:-2048}" \
   --grad-checkpoint \
-  --learning-rate 1e-4 \
+  --learning-rate "${LR:-1e-4}" \
   --steps-per-report 20 \
   --steps-per-eval 50 \
   --val-batches 12 \
-  --save-every 100 \
+  --save-every "${SAVE_EVERY:-100}" \
   --adapter-path "$ADAPTER"
 
 echo

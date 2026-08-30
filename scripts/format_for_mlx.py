@@ -37,6 +37,22 @@ def main():
         if src.exists():
             rows += [json.loads(l) for l in src.read_text().splitlines() if l.strip()]
 
+    # HONEST GATE: never train on the held-out eval battery (eval_router.py) — the seed/journal overlap it
+    # ("play tum hi ho", "next song", …), and training on the eval turns a real gain into memorization.
+    import importlib.util
+    _spec = importlib.util.spec_from_file_location("eval_router", ROOT / "scripts" / "eval_router.py")
+    _er = importlib.util.module_from_spec(_spec); _spec.loader.exec_module(_er)
+    _held = {u.strip().lower() for u, _ in _er.BATTERY}
+    before = len(rows)
+    seen_utt, deduped = set(), []                 # drop eval-battery rows + exact-duplicate utterances
+    for r in rows:
+        u = (r.get("utterance") or "").strip().lower()
+        if not u or u in _held or u in seen_utt:
+            continue
+        seen_utt.add(u); deduped.append(r)
+    rows = deduped
+    print(f"rows: {before} -> {len(rows)} after removing eval-battery + duplicate utterances")
+
     out = []
     for r in rows:
         msgs = [{"role": "system", "content": sysc}, {"role": "user", "content": r["utterance"]}]
