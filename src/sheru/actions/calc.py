@@ -59,6 +59,7 @@ def _to_expr(text: str, last=None) -> str:
         t = re.sub(pat, rep, t)
     t = re.sub(r"\bsquared\b", "**2", t)
     t = re.sub(r"\bcubed\b", "**3", t)
+    t = re.sub(r"(\d+(?:\.\d+)?)\s+factorial\b", r"factorial(\1)", t)   # postfix: '5 factorial' -> factorial(5)
     t = re.sub(r"(\d+(?:\.\d+)?)\s*(?:percent|%)\s+of\s+", r"(\1/100)*", t)   # 15% of 200
     t = re.sub(r"(\d+(?:\.\d+)?)\s*(?:percent|%)", r"(\1/100)", t)
     t = re.sub(r"\b(sqrt|factorial)\s+(\(?-?\d+(?:\.\d+)?\)?)", r"\1(\2)", t)  # sqrt 144 -> sqrt(144)
@@ -83,6 +84,9 @@ _KNOWN_WORDS = {
 
 def calc(text: str, last=None):
     """Return the numeric value for a math utterance, or None if it isn't confidently math."""
+    if re.match(r"\s*(?:set\s+|turn\s+(?:up|down|the)\s+)?(?:the\s+)?(?:volume|brightness|sound|audio)\b",
+                text.lower()):
+        return None                                        # a device command, not math ('volume 20 percent' != 0.2)
     noise = [w for w in re.findall(r"[a-z]+", text.lower()) if w not in _KNOWN_WORDS]
     if len(noise) > 1:                                     # 'add 2 apples and 3 oranges' -> not a calculation
         return None

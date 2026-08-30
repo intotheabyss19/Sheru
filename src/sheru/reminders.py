@@ -23,6 +23,9 @@ def parse_when(text: str):
     t = re.sub(r"\b(" + _HR + r")\s+in\s+(?:the\s+)?morning\b", r"at \1 am", t)
     t = re.sub(r"\b(" + _HR + r")\s+(?:in\s+(?:the\s+)?(?:afternoon|evening)|at\s+night|in\s+(?:the\s+)?night|tonight)\b",
                r"at \1 pm", t)
+    # durations spelled as fractions of an hour -> 'in N minutes' (absorb a leading in/at/a so it's not read as a clock time)
+    t = re.sub(r"\b(?:in|at)?\s*(?:a\s+|an\s+)?half an hour\b", "in 30 minutes", t)
+    t = re.sub(r"\b(?:in|at)?\s*(?:a\s+|an\s+)?quarter of an hour\b", "in 15 minutes", t)
     m = re.search(r"\bin\s+(\d+|" + "|".join(_WORDS) + r")\s*(second|sec|minute|min|hour|hr)s?\b", t)
     if m:
         n = _WORDS.get(m.group(1), None)
@@ -36,20 +39,21 @@ def parse_when(text: str):
     # "half past six", "quarter to eight".
     _MINW = {"o'clock":0,"oclock":0,"fifteen":15,"thirty":30,"forty five":45,"forty-five":45,
              "twenty five":25,"twenty-five":25,"twenty":20,"ten":10,"five":5,"forty":40}
-    mq = re.search(r"\b(?:at\s+)?(half|quarter)\s+(past|to)\s+(" + "|".join(_H) + r")\b", t)
+    _hval = lambda s: _H[s] if s in _H else int(s)                     # accept a spelled-out OR digit hour
+    mq = re.search(r"\b(?:at\s+)?(half|quarter)\s+(past|to)\s+(\d{1,2}|" + "|".join(_H) + r")\b", t)
     if mq:
         mins = 30 if mq.group(1) == "half" else 15
-        h = _H[mq.group(3)]
+        h = _hval(mq.group(3))
         if mq.group(2) == "to":
             h = (h - 1) % 12 or 12
             mins = 60 - mins
         t = t.replace(mq.group(0), f"at {h}:{mins:02d}")
     else:
-        mc = re.search(r"\b(?:at\s+)?(" + "|".join(_H) + r")\s+(o'?\s*clock|fifteen|thirty|forty[\s-]?five|"
+        mc = re.search(r"\b(?:at\s+)?(\d{1,2}|" + "|".join(_H) + r")\s+(o'?\s*clock|fifteen|thirty|forty[\s-]?five|"
                        r"twenty[\s-]?five|twenty|ten|five|forty)\b", t)
         if mc:
             mn = 0 if "clock" in mc.group(2) else _MINW.get(mc.group(2).replace("-", " "), 0)
-            t = t.replace(mc.group(0), f"at {_H[mc.group(1)]}:{mn:02d}")
+            t = t.replace(mc.group(0), f"at {_hval(mc.group(1))}:{mn:02d}")
     mw = re.search(r"\bat\s+(" + "|".join(_H) + r")\s*(a\.?m\.?|p\.?m\.?)?\b", t)
     if mw:
         t = t.replace(mw.group(0), f"at {_H[mw.group(1)]}{' '+mw.group(2) if mw.group(2) else ''}", 1)

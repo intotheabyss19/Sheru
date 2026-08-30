@@ -153,7 +153,7 @@ def news(query: str) -> str | None:
                    r"updates?|happening|going)\b", " ", query, flags=re.I)
     topic = re.sub(r"[^\w\s]", " ", topic)
     topic = re.sub(r"\s+", " ", topic).strip()
-    has_topic = len(topic) > 2
+    has_topic = len(topic) >= 2                            # keep short topics like 'AI', 'US', 'UK'
     base = "https://news.google.com/rss"
     url = (base + "/search?q=" + urllib.parse.quote(topic) + "&" if has_topic else base + "?") + \
           "hl=en-IN&gl=IN&ceid=IN:en"
