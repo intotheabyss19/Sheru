@@ -554,6 +554,20 @@ class Sheru:
         self._ensure_panel()
         self.panel.show_history(lambda q: C.list_sessions(query=q), C.session_turns, C.toggle_star)
 
+    def request_permissions(self) -> None:
+        """Prompt for Accessibility + Automation and open the right System Settings panes — so auto-send,
+        the F5 hotkey, and typing mode work under Sheru's own identity instead of you clicking Send yourself."""
+        from . import permissions
+        permissions.request_all()
+        try:
+            import rumps
+            rumps.notification("Sheru — Permissions",
+                               "Toggle Sheru ON in the panes that opened",
+                               "Enable Sheru under Accessibility and Automation, then it can send messages, "
+                               "place calls, and type for you hands-free.")
+        except Exception:
+            pass
+
     # ---- listening orb (Siri-style) ------------------------------------------------
     def _ensure_orb(self) -> None:
         """Create/rebuild the listening orb for the current style (config.ORB_STYLE: 'orb'|'particles')."""
@@ -1007,7 +1021,7 @@ def run_menubar(app: Sheru) -> None:
                 it.state = 1 if config.ORB_STYLE == key else 0
                 style.add(it); self._orb_items[key] = it
             self.menu = ["🎙 Talk to Sheru", "Type to Sheru", "🕘 History", voice, mic, style,
-                         "Setup / Permissions…", "🎵 Set up Spotify…", "Mute", None,
+                         "🔓 Grant Permissions", "Setup / Permissions…", "🎵 Set up Spotify…", "Mute", None,
                          self._alarm_item, self._stop_item, None, "Quit Sheru"]
 
         def _set_voice(self, backend):
@@ -1075,6 +1089,10 @@ def run_menubar(app: Sheru) -> None:
         def _history(self, _):
             app.show_history_panel()
 
+        @rumps.clicked("🔓 Grant Permissions")
+        def _grant(self, _):
+            app.request_permissions()
+
         @rumps.clicked("Setup / Permissions…")
         def _setup(self, _):
             app.show_onboarding()
@@ -1129,6 +1147,19 @@ def run_menubar(app: Sheru) -> None:
         except Exception as e:
             log.debug("history prune skipped: %s", e)
     threading.Thread(target=_prune_history, daemon=True).start()
+    def _perm_nudge():                              # if the .app isn't trusted, nudge once (hotkey/typing/auto-send)
+        try:
+            import time as _t
+            _t.sleep(8)
+            from . import permissions
+            if not permissions.accessibility_trusted():
+                import rumps
+                rumps.notification("Sheru needs permissions", "Click '🔓 Grant Permissions' in the menu bar",
+                                   "Enable Sheru under Accessibility + Automation so the F5 hotkey, auto-send, "
+                                   "and typing mode work.")
+        except Exception:
+            pass
+    threading.Thread(target=_perm_nudge, daemon=True).start()
     app.start_trigger_socket()
     if os.environ.get("SHERU_ALWAYS_ON"):
         threading.Thread(target=lambda: (_wait_warm(app), app.start_voice()), daemon=True).start()
