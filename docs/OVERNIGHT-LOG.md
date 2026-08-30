@@ -109,3 +109,26 @@ Sheru now runs as a **login agent** (a fresh macOS permission identity, not the 
 **Accessibility** + **Automation** (F5 hotkey, typing mode, WhatsApp auto-send) and **Microphone** (first F5 will prompt) —
 via the menu-bar **✦ → 🔓 Grant Permissions**, or just approve the macOS prompts. Leave the "background item" enabled in
 System Settings → Login Items. Everything else works without it.
+
+---
+
+## Overnight #2 — Aug 31 (~02:00–03:05) — Shortcuts integration + real-usage fixes
+
+After the fine-tune (kept base), you said "continue working" + rebooted for a clean slate. I built the queued
+Shortcuts integration and fixed real misroutes from your usage log. **Sheru is live (LaunchAgent) with all of it.**
+
+| Start | End | What I did | Result |
+|---|---|---|---|
+| 02:05 | 02:20 | **`run_shortcut` bridge** (`actions/shortcuts.py` + grammar): say **"run shortcut &lt;name&gt;"** and Sheru runs it (fuzzy-matched to your shortcut list, timeout-guarded, graceful if unknown). This is the leverage point — Sheru can now borrow ANY Shortcuts action | Shipped + tested |
+| 02:20 | 02:45 | **Focus / DND by voice**: "turn on do not disturb", "set focus to work", "turn off focus", "what's my focus" → Focus helper shortcuts. Focus has no clean scripting API, so Shortcuts is the way | Shipped + tested |
+| 02:45 | 03:00 | Scanned your **actions.log** for real FAILs → fixed two: **"how do you feel about me"** was being treated as a "how-to tutorial" (howto rule caught "how do you…"); and **brightness** ("maximize the screen brightness", "set brightness to 50", "dim the screen") hit the LLM's "I can't" → now routes to a "Sheru Set Brightness" helper Shortcut | 2 real bugs fixed |
+| 03:00 | 03:05 | Restarted Sheru on the new code; verified run_shortcut / brightness / howto routing live; sparkles icon up | Live |
+
+### ⚙️ To turn the voice commands on, create these Shortcuts once (I can't make them from the CLI)
+In the **Shortcuts app**, name each exactly — full steps in `docs/SHORTCUTS-INTEGRATION.md`:
+- **`Sheru Set Focus`** (Set Focus → On, focus = Shortcut Input) · **`Sheru Focus Off`** (Set Focus → Turn Off)
+- **`Sheru Get Focus`** (Get Current Focus → output name) · **`Sheru Set Brightness`** (Set Brightness = Shortcut Input)
+
+Until then, Sheru tells you exactly which shortcut to create instead of failing. And **run any shortcut you already
+have** with "run shortcut &lt;name&gt;" — no setup needed. (Bluetooth toggle skipped — it's not a Shortcuts action and
+needs a CLI I won't install unprompted.)
