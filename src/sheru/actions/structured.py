@@ -44,7 +44,8 @@ _NUM = r"(\d+(?:\.\d+)?)"
 
 def fx(query: str) -> str | None:
     """'100 dollars in rupees', 'convert 50 euro to inr', 'how much is 20 usd in gbp' -> exact converted amount."""
-    q = query.lower()
+    from ..numwords import replace_number_words
+    q = replace_number_words(query.lower())                # 'convert hundred dollars' -> 'convert 100 dollars'
     if not any(w in q for w in ("in ", " to ", "into", "convert", "worth", "exchange")):
         if "rate" not in q:
             return None

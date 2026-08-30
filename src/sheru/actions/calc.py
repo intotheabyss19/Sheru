@@ -87,6 +87,8 @@ def calc(text: str, last=None):
     if re.match(r"\s*(?:set\s+|turn\s+(?:up|down|the)\s+)?(?:the\s+)?(?:volume|brightness|sound|audio)\b",
                 text.lower()):
         return None                                        # a device command, not math ('volume 20 percent' != 0.2)
+    from ..numwords import replace_number_words
+    text = replace_number_words(text)                      # 'five plus five' -> '5 plus 5' (Whisper emits words)
     noise = [w for w in re.findall(r"[a-z]+", text.lower()) if w not in _KNOWN_WORDS]
     if len(noise) > 1:                                     # 'add 2 apples and 3 oranges' -> not a calculation
         return None

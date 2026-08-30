@@ -172,6 +172,9 @@ class Router:
         if v is not None:
             self._last_calc = v                          # remember for continued calc ('times 2', 'plus 10', 'add 5 to that')
             return Result(calc.speak_result(v), tool="calc", followup=True)
+        if re.match(r"^(?:set\s+|turn\s+)?(?:the\s+)?(?:volume|brightness|sound)\b", t):
+            from .numwords import replace_number_words     # 'set volume to twenty' -> '... 20' (device cmds only)
+            t = replace_number_words(t)
         for pat, kind in self.RULES:
             m = pat.match(t)
             if m:
