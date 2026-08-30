@@ -110,6 +110,8 @@ check("GDP (changing stat) -> local search", bool(r.route("what is the gdp of in
 check("coding -> Claude handoff", bool(r.route("write a python script to rename my files").handoff))
 check("'set volume to twenty' -> volume tool (word-number)", r.route("set volume to twenty").tool == "volume")
 check("'remind me in half an hour' schedules (mocked)", "remind" in (r.route("remind me in half an hour").speech or "").lower())
+check("'open a wikipedia page on X' -> wiki_open (not open_app)", r.route("open a wikipedia page on the sun").tool == "wiki_open")
+check("'open spotify' still -> open_app", r.route("open spotify").tool == "open")
 
 print(f"\n{'ALL PASS' if not fails else str(len(fails)) + ' FAILED: ' + ', '.join(fails)}  "
       f"({'0' if not fails else len(fails)} of many)")

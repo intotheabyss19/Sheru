@@ -109,6 +109,7 @@ class Router:
         (re.compile(r"^(?:reply|answer|talk|speak|respond)\s+(?:to me\s+|back\s+)?(?:in|only in)\s+(hindi|english|both|hinglish)\b.*$"), "set_reply_lang"),
         (re.compile(r"^(?:use|switch to|open)\s+(brave|google chrome|chrome|zen|firefox)(?:\s+browser)?$"), "use_browser"),
         (re.compile(r"^(?:use|switch to|go to|open)\s+(?:the\s+)?(.+?)(?:['’]s)?\s+profile\b.*$"), "profile"),
+        (re.compile(r"^(?:open|show(?:\s+me)?|pull up|bring up|go to)\s+(?:a\s+|an\s+|the\s+)?wikipedia\s+(?:page\s+|article\s+|entry\s+)?(?:on|about|for|of|regarding)\s+(.+)$"), "wiki_open"),
         (re.compile(r"^(?:open|launch|start|run)\s+(?:the\s+)?(?!(?:a\s+|an\s+|my\s+)?(?:timer|alarm|stopwatch|reminder|countdown)\b)(?:a\s+|an\s+|my\s+)?(.+?)(?:\s+(?:app|application|browser))?$"), "open"),
         (re.compile(r"^(?:quit|close|kill)\s+(?!all (?:my|the|your) )(?:the\s+)?(.+?)(?:\s+(?:app|application))?$"), "quit"),
         (re.compile(r"^(?:switch|go|jump)\s+to\s+(?:the\s+)?(.+?)\s+profile$"), "profile"),
@@ -249,6 +250,11 @@ class Router:
             return Result(browser_agent.play_youtube(next((x for x in g if x), "").strip()), followup=True)
         if kind == "yt_music":
             return Result(browser_agent.play_music(g[0].strip()), followup=True)
+        if kind == "wiki_open":
+            import urllib.parse as _u
+            topic = g[0].strip().rstrip("?.!")
+            web.open_url("https://en.wikipedia.org/wiki/Special:Search?search=" + _u.quote(topic))
+            return Result(f"Opening the Wikipedia page on {topic}.")
         if kind == "gmail_open":
             return Result(apps.open_app("Mail"), followup=True)   # Apple Mail (local) has Yash's Gmail — prefer local over the browser
         if kind == "gmail_compose":
