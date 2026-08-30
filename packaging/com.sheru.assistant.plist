@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.sheru.assistant</string>
+  <!-- Run the venv entrypoint directly (NOT the .app shim). A LaunchAgent runs in the Aqua GUI session, so the
+       menu-bar status item lays out correctly — unlike the .app, which exec's a binary outside its bundle and is
+       treated as a faceless process (status item collapses to zero height / invisible). -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/yash/Projects/Sheru/.venv/bin/sheru</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <!-- Restart if Sheru CRASHES (non-zero exit), but honour a clean Quit from the menu bar (exit 0). -->
+  <key>KeepAlive</key>
+  <dict><key>SuccessfulExit</key><false/></dict>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>WorkingDirectory</key><string>/Users/yash/Projects/Sheru</string>
+  <key>StandardOutPath</key><string>/Users/yash/Projects/Sheru/data/sheru.log</string>
+  <key>StandardErrorPath</key><string>/Users/yash/Projects/Sheru/data/sheru.log</string>
+  <!-- launchd starts with a minimal PATH; add ~/.local/bin (claude), Homebrew, and the system dirs so Sheru can
+       shell out to claude / osascript / open / afplay / shortcuts. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/Users/yash/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+</dict>
+</plist>
