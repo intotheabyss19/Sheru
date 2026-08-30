@@ -48,3 +48,23 @@ Times are local. Newest at the bottom.
 | 05:54 | 05:56 | **Cleanup after testing** (as you asked): my router tests had actually executed side effects — reset system volume 100%→8% (a "make it loud" test cranked it) and cleared 11 stale test reminders (one would've rung a bell at 5pm). Verified clean restart: no restored reminders, no audio errors | System left tidy, volume 8% |
 | 05:56 | 06:02 | Wrote tests/test_overnight_fixes.py — 36 side-effect-free regression checks locking in tonight's fixes (mocks all actions so it never changes volume/schedules reminders) | All 36 pass, 0 side effects |
 | 06:19 | 06:32 | Scanned the full actions.log for FAIL entries: fixed 'open a wikipedia page on X' (was trying to open an app) → now opens the Wikipedia page; verified the refusal→local-search fix catches the other two ("I can't browse", financial-advice deflection) | All logged FAILs addressed |
+
+---
+
+## Evening session — Aug 30 (~20:35–21:00 local) — punch-list + typing mode
+
+You left an 8-item list and said "continue working on all features, I'll be back in an hr." All 8 addressed.
+
+| Start | End | What I did | Result |
+|---|---|---|---|
+| 20:35 | 20:45 | #5 **Grant-Permissions flow**: new `permissions.py` (Accessibility via AXIsProcessTrustedWithOptions + Automation via a benign System-Events call), a "🔓 Grant Permissions" menu item, and a startup nudge — opens the exact Settings pane so you toggle Sheru on once, like any other app | Live; menu item + nudge |
+| 20:35 | 20:48 | #3 **Menu-bar icon** was missing (template=True on a colored PNG rendered near-invisible) → switched to the 🦁 emoji title | Icon visible in menu bar |
+| 20:45 | 20:56 | #6 **Hands-free typing/dictation mode**: two Tier-0 router rules ("open <person>'s chat and activate typing mode" → opens their WhatsApp chat; bare "activate typing mode" → types into whatever's focused). While on, every spoken line is typed via System Events, with Return-to-send ONLY in chat apps (WhatsApp/Messages/Telegram/Discord/Slack/Signal) so dictating into a document never auto-sends. "disable/stop/exit typing mode" leaves it | Routing + intercept verified; gated on Accessibility grant |
+| 20:56 | 20:57 | #4 **Hold-F5 → chat** felt slow: Karabiner hold threshold 350ms → **220ms** (−37%) | Auto-reloaded by Karabiner |
+| 20:57 | 20:58 | Restarted Sheru.app (single-instance) on the new code; verified one instance, models warm 7.0s, socket + F5 hotkey up | App healthy |
+| 20:58 | 21:00 | Safe end-to-end check of the typing keystroke into TextEdit (sanctioned scratch target) → **confirmed it blocks until Accessibility is granted to Sheru.app** — which is exactly what the #5 flow is for. Cleaned up TextEdit (no save). Kicked off the deferred #6 research (text-box recognition / mouseless clicking) as a background agent → `docs/RESEARCH-mouseless-typing.md` | Mechanism validated; research running |
+
+**Already done earlier this session** (from your list): #1 continued conversations (flag-based follow-up arming + an "anything else?" check-in before closing), #2 the duplicate Sheru.app removed, #7 Devanagari no longer reaches TTS (Roman-Hinglish replies + romanize), #8 the orb turns blue for Claude (CoreAnimation state flip moved onto the main thread).
+
+### ⚠️ One thing needs YOU (30 seconds)
+Typing mode, the F5 hotkey, and WhatsApp call/automation all need **Accessibility** (and Automation) granted to **Sheru.app** — a fresh grant because the packaged app is a different identity from the terminal. Click the menu-bar 🦁 → **🔓 Grant Permissions**, then toggle **Sheru** on under Accessibility (and allow the Automation prompts). Until then those features silently do nothing. Everything else works without it.
