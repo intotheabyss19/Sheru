@@ -129,6 +129,9 @@ class Router:
         (re.compile(r"^(?:set\s+)?(?:the\s+)?(?:screen\s+)?brightness\s+(?:to\s+)?(\d{1,3})(?:\s*percent)?$"), "brightness_set"),
         (re.compile(r"^(?:maximi[sz]e|max|full|full ?screen)\s+(?:the\s+)?(?:screen\s+)?brightness$|^(?:set\s+)?(?:the\s+)?(?:screen\s+)?brightness\s+(?:to\s+)?(?:full|max(?:imum)?|hundred|100)$|^(?:make\s+)?(?:the\s+)?screen\s+brightest$"), "brightness_max"),
         (re.compile(r"^(?:dim|lower|minimi[sz]e|reduce)\s+(?:the\s+)?(?:screen\s+)?brightness$|^dim\s+(?:the\s+)?screen$"), "brightness_min"),
+        (re.compile(r"^(?:move|snap|put|shove)\s+(?:this\s+|the\s+|it\s+)?window\s+(?:to\s+the\s+|to\s+)?(left|right|top|bottom)$|^(left|right|top|bottom)\s+half$|^snap\s+(?:it\s+)?(left|right|top|bottom)$"), "window_half"),
+        (re.compile(r"^(?:maximi[sz]e|full[\s-]?screen)\s+(?:this\s+|the\s+|it\s+)?window$|^(?:make\s+)?(?:this\s+|it\s+)?(?:window\s+)?full[\s-]?screen$|^maximi[sz]e\s+(?:this|it)$"), "window_max"),
+        (re.compile(r"^cent(?:er|re)\s+(?:this\s+|the\s+)?window$"), "window_center"),
         (re.compile(r"^(?:open|launch|start|run)\s+(?:the\s+)?(?!(?:a\s+|an\s+|my\s+)?(?:timer|alarm|stopwatch|reminder|countdown)\b)(?:a\s+|an\s+|my\s+)?(.+?)(?:\s+(?:app|application|browser))?$"), "open"),
         (re.compile(r"^(?:quit|close|kill)\s+(?!all (?:my|the|your) )(?:the\s+)?(.+?)(?:\s+(?:app|application))?$"), "quit"),
         (re.compile(r"^(?:switch|go|jump)\s+to\s+(?:the\s+)?(.+?)\s+profile$"), "profile"),
@@ -392,6 +395,13 @@ class Router:
             return self._run_helper("Sheru Set Brightness", "100", "Brightness maxed.")
         if kind == "brightness_min":
             return self._run_helper("Sheru Set Brightness", "20", "Screen dimmed.")
+        if kind == "window_half":
+            d = next((x for x in g if x), "left")
+            return Result(system.window(f"{d}-half", f"Snapped {d}."), tool="window")
+        if kind == "window_max":
+            return Result(system.window("maximize", "Maximized."), tool="window")
+        if kind == "window_center":
+            return Result(system.window("center", "Centered."), tool="window")
         if kind == "media":
             cmd = {"resume": "play", "skip": "next", "back": "previous"}.get(g[0], g[0])
             return Result(system.media(cmd))

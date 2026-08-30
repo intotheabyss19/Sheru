@@ -28,6 +28,14 @@ def mute(state: bool = True) -> str:
     return "Muted." if state else "Unmuted."
 
 
+def window(action: str, ack: str = "Done.") -> str:
+    """Move/resize the FRONTMOST window via Rectangle's URL scheme (Rectangle is installed). One-time enable:
+    `defaults write com.knollsoft.Rectangle url -bool true` then restart Rectangle. `action` is a Rectangle
+    action name, e.g. left-half, right-half, maximize, center, top-left."""
+    subprocess.run(["open", f"rectangle://execute-action?name={action}"], check=False)
+    return ack
+
+
 def media(cmd: str) -> str:
     """cmd in play|pause|next|previous — targets Spotify if running, else Music."""
     app = "Spotify" if _osa('tell application "System Events" to (name of processes) contains "Spotify"') == "true" else "Music"

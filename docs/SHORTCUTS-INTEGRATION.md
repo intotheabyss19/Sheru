@@ -17,6 +17,10 @@ Built and routing-tested (`tests/test_overnight_fixes.py`):
 - **Focus / DND by voice** (grammar → helper shortcuts): **"turn on do not disturb"**, **"set focus to work"**,
   **"turn on work focus"**, **"turn off focus"**, **"what's my focus"**. Until the helper shortcuts exist, Sheru
   says exactly which one to create.
+- **Window management by voice** (via **Rectangle**, not Shortcuts — you have it installed): **"maximize this
+  window"**, **"make it full screen"**, **"left/right/top/bottom half"**, **"move window left"**, **"center this
+  window"**. I enabled Rectangle's URL scheme for this (`defaults write com.knollsoft.Rectangle url -bool true`);
+  works out of the box, no setup.
 
 ### ⚙️ YOU create these once (I can't make shortcuts from the CLI) — then the voice commands above work
 In the **Shortcuts app** → **+** New Shortcut, name each EXACTLY:

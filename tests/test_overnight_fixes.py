@@ -28,7 +28,7 @@ shortcuts.list_shortcuts = lambda *a, **k: []
 
 for mod, fns in {
     apps: ["open_app", "quit_app", "switch_to"], music: ["play_song"],
-    system: ["set_volume", "media", "set_timer", "change_volume", "now", "mute"],
+    system: ["set_volume", "media", "set_timer", "change_volume", "now", "mute", "window"],
     files: ["make", "open_terminal", "open_terminal_claude"],
     web: ["search", "image_search", "open_url"],
     browser: ["set_browser"], browser_agent: ["play_youtube", "play_music"],
@@ -157,6 +157,14 @@ check("'how do i reset my password' is still a howto", r.route("how do i reset m
 check("'maximize the screen brightness' -> brightness helper (was 'I can't')", r.route("maximize the screen brightness").tool == "focus")
 check("'set brightness to 50' -> brightness helper", r.route("set brightness to 50").tool == "focus")
 check("'dim the screen' -> brightness helper", r.route("dim the screen").tool == "focus")
+
+print("window management (via Rectangle) — routing:")
+check("'maximize this window' -> window", r.route("maximize this window").tool == "window")
+check("'make it full screen' -> window", r.route("make it full screen").tool == "window")
+check("'left half' -> window", r.route("left half").tool == "window")
+check("'move window right' -> window", r.route("move window right").tool == "window")
+check("'center this window' -> window", r.route("center this window").tool == "window")
+check("'play left hand' does NOT match window (no false-fire)", r.route("play left hand").tool != "window")
 
 print("review fixes — stop-shadowing, message-body mutation, brightness clamp:")
 check("'stop do not disturb' -> focus (not swallowed by generic stop)", r.route("stop do not disturb").tool == "focus")
