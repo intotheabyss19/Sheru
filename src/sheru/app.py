@@ -75,8 +75,12 @@ class Sheru:
                     or low in ("stop typing", "disable typing", "typing off", "exit typing", "done typing"):
                 self._typing_mode = False
                 sink("Typing mode off.")
+                if self._is_voice_sink(sink):
+                    self.allow_followup(12)                # stay listening for the next normal command
                 return "typing-off"
             self._type_and_send(text)
+            if self._is_voice_sink(sink):
+                self.allow_followup(20)                    # keep the mic open for the NEXT line to dictate
             return "typed"
         if self.pending is not None:
             return self._handle_pending(text, sink)
@@ -325,6 +329,8 @@ class Sheru:
             self._typing_mode = True
             msg = "Typing mode on. I'll type what you say into the active window. Say 'disable typing mode' to stop."
         sink(msg)
+        if self._is_voice_sink(sink):
+            self.allow_followup(20)                        # re-open the mic so the first dictated line is captured
         return msg
 
     def _type_and_send(self, text: str) -> None:
@@ -493,6 +499,11 @@ class Sheru:
                         if self.panel is not None:
                             self.panel._set_out("(didn't catch anything — speak a bit louder/closer)")
                         log.info("ptt: no speech captured")
+                        break
+                    if self._typing_mode:                  # in typing mode a quiet window means "done dictating"
+                        self._typing_mode = False
+                        log.info("ptt: quiet in typing mode — exiting typing mode")
+                        self._say_both("Typing mode off.")
                         break
                     # a follow-up window went quiet — CHECK IN once before closing, so the conversation never
                     # drops on you silently (Yash's ask). Only end after 'Anything else?' also gets no reply.

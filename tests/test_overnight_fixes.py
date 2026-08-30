@@ -122,6 +122,20 @@ check("'give satya a call' -> call intent", r.route("give satya a call").call is
 check("'call claude' is NOT a call", r.route("call claude").call is None)
 check("'call it a day' is NOT a call", r.route("call it a day").call is None)
 
+print("typing/dictation mode — routing + disable-phrase detection:")
+import re as _re
+_t1 = r.route("open Gaurav's chat and activate typing mode")
+check("'open X's chat and activate typing mode' -> typing, recipient", bool(_t1.typing) and _t1.typing.get("recipient") == "gaurav")
+_t2 = r.route("activate typing mode")
+check("'activate typing mode' -> typing, no recipient", bool(_t2.typing) and _t2.typing.get("recipient") is None)
+check("'turn on typing mode' -> typing", bool(r.route("turn on typing mode").typing))
+check("'start dictation mode' -> typing", bool(r.route("start dictation mode").typing))
+_DIS = _re.compile(r"\b(disable|deactivate|stop|exit|turn off|end|quit|close)\s+(?:the\s+)?(?:typing|dictation|type|hands\s?free)\s*mode\b")
+_is_dis = lambda s: bool(_DIS.search(s) or s in ("stop typing", "disable typing", "typing off", "exit typing", "done typing"))
+check("'disable typing mode' detected as exit", _is_dis("disable typing mode"))
+check("'stop typing' detected as exit", _is_dis("stop typing"))
+check("'send this to gaurav' is NOT an exit (gets typed)", not _is_dis("send this to gaurav"))
+
 print("tts — phonemizer language-switch fix (names like 'Satya' don't become gibberish):")
 from sheru.tts import _patch_phonemizer_language_switch
 _patch_phonemizer_language_switch()
