@@ -130,13 +130,18 @@ class Sheru:
                 AppHelper.callAfter(self.show_type_panel)
             except Exception:
                 pass
-        # Keep the mic open for a natural follow-up ONLY after conversational replies (answers/chat) or when the
-        # handler opted in — NOT after fire-and-forget actions (open/terminal/play), where re-arming invited a
-        # mic-echo loop that spawned duplicate windows.
-        conversational = getattr(res, "tool", None) in (None, "remember", "status", "help", "recall")
-        asks_back = bool(res.speech) and res.speech.rstrip().endswith("?")   # a question invites — and needs time for — a reply
-        if self._is_voice_sink(sink) and res.speech and (res.followup or conversational or asks_back):
-            # generous windows so the conversation doesn't drop mid-thought; end it explicitly with "no"/"that's all"
+        # After a spoken ANSWER, keep the mic open — the conversation stays alive until you end it ("no"/"that's
+        # all") or two quiet windows. Only DON'T re-arm after fire-and-forget actions (open/play/volume/timer…),
+        # where re-arming used to cause a mic-echo loop, and after an explicit sign-off.
+        FIRE_AND_FORGET = {"open", "quit", "switch", "gmail_open", "play_song", "yt_music", "youtube", "howto",
+                           "play_playlist", "remember_playlist", "volume", "volume_delta", "mute", "media",
+                           "media_pause", "skip", "timer", "alarm", "images", "url", "fs_make", "terminal_in",
+                           "term_claude", "trainer", "set_voice", "set_reply_lang", "use_browser", "profile",
+                           "wiki_open", "setup", "rec_on", "rec_off", "end_convo"}
+        tool = getattr(res, "tool", None)
+        asks_back = bool(res.speech) and res.speech.rstrip().endswith("?")   # a question needs time for a reply
+        answered = bool(res.speech) and tool not in FIRE_AND_FORGET          # an answer -> invite continuation
+        if self._is_voice_sink(sink) and res.speech and (res.followup or asks_back or answered):
             self.allow_followup(25 if (res.followup or asks_back) else 20)
         self._record_turn(text, res.speech)
         return res.speech
@@ -427,10 +432,24 @@ class Sheru:
                 audio = capture_once(max_wait=wait, cfg=(None if first else fu_cfg))   # stricter on follow-ups
                 self._followup_armed = False              # consume; handle_text re-arms if this reply invites one
                 if audio is None:
-                    if first and self.panel is not None:
-                        self.panel._set_out("(didn't catch anything — speak a bit louder/closer)")
-                    log.info("ptt: no speech captured")
+                    if first:
+                        if self.panel is not None:
+                            self.panel._set_out("(didn't catch anything — speak a bit louder/closer)")
+                        log.info("ptt: no speech captured")
+                        break
+                    # a follow-up window went quiet — CHECK IN once before closing, so the conversation never
+                    # drops on you silently (Yash's ask). Only end after 'Anything else?' also gets no reply.
+                    if not getattr(self, "_asked_done", False):
+                        self._asked_done = True
+                        self._say_both("Anything else?")
+                        _t0 = time.monotonic()
+                        while self.speaker.speaking and time.monotonic() - _t0 < 8:
+                            time.sleep(0.1)
+                        self._followup_window = 14.0
+                        continue                          # re-open the mic for the answer
+                    log.info("ptt: quiet after 'Anything else?' — ending the conversation")
                     break
+                self._asked_done = False                  # a real reply -> reset the 'checked in' state
                 text = self.stt.transcribe(audio)
                 log.info("ptt stt %.2fs: %r", self.stt.last_latency, text)
                 from . import recorder
@@ -704,7 +723,7 @@ class Sheru:
                     log.info("answered LOCALLY via web-search + summarize")
                     sink(ans)
                     self.router.history.append({"role": "assistant", "content": ans[:800]})
-                    self.allow_followup(12)
+                    self.allow_followup(20)
                 else:
                     log.info("local search couldn't answer -> escalating to Claude")
                     self._delegate(query, sink)  # claude.busy is set synchronously -> the gate switches to it
@@ -780,7 +799,7 @@ class Sheru:
 
     def _after_claude(self) -> None:
         self.status = "listening"
-        self.allow_followup(12)     # a spoken answer invites a follow-up; keep the mic open a bit longer
+        self.allow_followup(20)     # a spoken answer invites a follow-up; keep the mic open a bit longer
 
     # ---- wake-word detection on the transcript -----------------------------------
     WAKE_RE = re.compile(r"^\W*(?:hey|hi|ok|okay|yo)?\W*(sheru|sharu|shiru|shero|sheroo|cheru|shiro|sherry|sheroux|charu|chaaru|churu|jeru|jaru|jeroo|sheroo)\b[\s,.!?]*", re.I)
