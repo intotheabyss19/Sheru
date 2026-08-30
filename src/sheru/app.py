@@ -311,6 +311,12 @@ class Sheru:
         """Enter hands-free TYPING mode: from now on spoken words get typed into the focused field.
         If a recipient is named, open their WhatsApp chat first so the input is focused. Needs Accessibility."""
         import subprocess
+        from . import permissions
+        if not permissions.accessibility_trusted():        # without it keystroke synthesis silently hangs macOS
+            sink("I need Accessibility access to type for you. I'm opening Settings — switch Sheru on under "
+                 "Accessibility, then ask me again.")
+            permissions.request_accessibility()
+            return "need-accessibility"
         recipient = t.get("recipient")
         if recipient:
             contact = messaging.resolve_contact(recipient)
@@ -341,18 +347,23 @@ class Sheru:
             logging.info("typing-mode (dry): %r", text)
             return
         safe = text.replace("\\", "\\\\").replace('"', '\\"')
-        subprocess.run(["osascript", "-e", f'tell application "System Events" to keystroke "{safe}"'],
-                       capture_output=True)
-        try:
+        try:                                              # timeouts so a revoked grant can't freeze the app
+            subprocess.run(["osascript", "-e", f'tell application "System Events" to keystroke "{safe}"'],
+                           capture_output=True, timeout=8)
             front = subprocess.run(
                 ["osascript", "-e",
                  'tell application "System Events" to name of first application process whose frontmost is true'],
-                capture_output=True, text=True).stdout.strip().lower()
+                capture_output=True, text=True, timeout=4).stdout.strip().lower()
+        except subprocess.TimeoutExpired:
+            log.warning("typing keystroke timed out — Accessibility may be revoked; exiting typing mode")
+            self._typing_mode = False
+            self._say_both("I lost typing access. Turn Sheru back on under Accessibility in Settings.")
+            return
         except Exception:
             front = ""
         if front in ("whatsapp", "messages", "telegram", "discord", "slack", "signal"):
             subprocess.run(["osascript", "-e", 'tell application "System Events" to key code 36'],  # Return -> send
-                           capture_output=True)
+                           capture_output=True, timeout=4)
 
     def _handle_pending(self, text: str, sink) -> str:
         p = self.pending
