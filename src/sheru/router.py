@@ -81,7 +81,7 @@ class Router:
         (re.compile(r"^(?:stop|turn off|disable|pause)\s+recording\b.*|^stop saving\b.*"), "rec_off"),
         (re.compile(r"^(?:start|turn on|enable|resume)\s+recording\b.*"), "rec_on"),
         (re.compile(r"^(?:stop|pause|halt)\s+(?:the\s+|this\s+|that\s+|my\s+)?(?:music|song|playback|track|video|audio)\b.*$"), "media_pause"),
-        (re.compile(r"^(?:stop|cancel|never ?mind|shut up|quiet|enough)\b|^that'?s enough\b|^okay,? that'?s enough\b"), "stop"),
+        (re.compile(r"^(?:stop|cancel|never ?mind|shut up|quiet|enough)\b(?!\s+(?:do not disturb|dnd|focus))|^that'?s enough\b|^okay,? that'?s enough\b"), "stop"),
         # TYPING / dictation mode — speak and Sheru types it into the active field (before the generic 'open' rule)
         (re.compile(r"^(?:open|go to|pull up|start)\s+(.+?)(?:'?s)?\s+(?:chat|conversation|whats\s?app|messages?)\s+and\s+(?:then\s+)?(?:activate|enable|start|turn on|begin|go into)\s+(?:the\s+)?(?:typing|dictation|type|hands\s?free)\s+mode$"), "typing_open"),
         (re.compile(r"^(?:activate|enable|start|turn on|begin|go into|switch to)\s+(?:the\s+)?(?:typing|dictation|type|hands\s?free)\s+mode$"), "typing_on"),
@@ -204,7 +204,8 @@ class Router:
         if v is not None:
             self._last_calc = v                          # remember for continued calc ('times 2', 'plus 10', 'add 5 to that')
             return Result(calc.speak_result(v), tool="calc", followup=True)
-        if re.search(r"\b(?:volume|brightness|sound|audio)\b", t) and len(t) < 60:   # a device command, not a message
+        if (re.search(r"\b(?:volume|brightness|sound|audio)\b", t) and len(t) < 60
+                and not re.match(r"^(?:message|text|tell|send|whats?app|dm|reply|email|ask|remind|note)\b", t)):   # a device command, not a message that happens to mention 'sound'
             from .numwords import replace_number_words     # 'set volume to twenty' -> '... 20' (device cmds only)
             t = replace_number_words(t)
             t = re.sub(r"\s*%", " percent", t)             # Whisper writes 'percent' as '%'; the grammar wants the word
@@ -385,7 +386,7 @@ class Router:
         if kind == "focus_get":
             return self._run_helper("Sheru Get Focus", None, None, is_query=True)
         if kind == "brightness_set":
-            pct = next((x for x in g if x), "").strip()
+            pct = str(max(0, min(100, int(next((x for x in g if x), "0")))))   # clamp 0–100
             return self._run_helper("Sheru Set Brightness", pct, f"Brightness set to {pct} percent.")
         if kind == "brightness_max":
             return self._run_helper("Sheru Set Brightness", "100", "Brightness maxed.")

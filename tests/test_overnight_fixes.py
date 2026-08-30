@@ -158,6 +158,16 @@ check("'maximize the screen brightness' -> brightness helper (was 'I can't')", r
 check("'set brightness to 50' -> brightness helper", r.route("set brightness to 50").tool == "focus")
 check("'dim the screen' -> brightness helper", r.route("dim the screen").tool == "focus")
 
+print("review fixes — stop-shadowing, message-body mutation, brightness clamp:")
+check("'stop do not disturb' -> focus (not swallowed by generic stop)", r.route("stop do not disturb").tool == "focus")
+check("'stop focus' -> focus", r.route("stop focus").tool == "focus")
+check("'stop' alone still stops", r.route("stop").tool == "stop")
+check("'stop the music' still pauses (regression)", r.route("stop the music").tool == "media_pause")
+check("'set brightness to 500' doesn't crash, routes to brightness", r.route("set brightness to 500").tool == "focus")
+check("'increase the volume by 30%' still volume_by (device guard intact)", r.route("increase the volume by 30%").tool == "volume_by")
+_msg = r.route("text dad the sound crew needs thirty chairs")
+check("message mentioning 'sound' is NOT device-mutated (routes to a message)", _msg.draft is not None or _msg.tool in ("draft_message", "message"))
+
 print("typing/dictation mode — routing + disable-phrase detection:")
 import re as _re
 _t1 = r.route("open Gaurav's chat and activate typing mode")

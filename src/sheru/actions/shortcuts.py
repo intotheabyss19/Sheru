@@ -25,7 +25,8 @@ def run_shortcut(name: str, text: str | None = None, timeout: float = 25.0) -> s
     or None on failure (unknown shortcut, non-zero exit, timeout)."""
     cmd = ["shortcuts", "run", name]
     if text is not None:
-        cmd += ["-i", "-", "-o", "-"]
+        cmd += ["-i", "-"]                        # pipe input only when we have some
+    cmd += ["-o", "-"]                            # ALWAYS capture stdout — independent of -i; a query needs this too
     try:
         r = subprocess.run(cmd, input=(text if text is not None else None),
                            capture_output=True, text=True, timeout=timeout)
@@ -44,16 +45,13 @@ def resolve_name(spoken: str) -> str | None:
     if not names:
         return None
     low = spoken.strip().lower()
-    for n in names:                              # exact, then substring either way
-        if n.lower() == low:
-            return n
-    for n in names:
-        if low and (low in n.lower() or n.lower() in low):
-            return n
+    for n in names:                              # exact (case-insensitive) only — no loose substring match:
+        if n.lower() == low:                     # run_shortcut executes WITHOUT confirmation, and a helper could be
+            return n                             # destructive, so we must not fire on a coincidental substring hit.
     try:
         from rapidfuzz import process, fuzz
         m = process.extractOne(spoken, names, scorer=fuzz.WRatio)
-        if m and m[1] >= 70:
+        if m and m[1] >= 88:                     # strict — only near-identical spellings (STT wobble), not "delete"~"delete all photos"
             return m[0]
     except Exception:
         pass
