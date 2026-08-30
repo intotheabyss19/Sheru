@@ -128,8 +128,9 @@ class Sheru:
         # handler opted in — NOT after fire-and-forget actions (open/terminal/play), where re-arming invited a
         # mic-echo loop that spawned duplicate windows.
         conversational = getattr(res, "tool", None) in (None, "remember", "status", "help", "recall")
-        if self._is_voice_sink(sink) and res.speech and (res.followup or conversational):
-            self.allow_followup(12 if res.followup else 8)
+        asks_back = bool(res.speech) and res.speech.rstrip().endswith("?")   # a question invites — and needs time for — a reply
+        if self._is_voice_sink(sink) and res.speech and (res.followup or conversational or asks_back):
+            self.allow_followup(15 if (res.followup or asks_back) else 10)
         self._record_turn(text, res.speech)
         return res.speech
 
@@ -408,11 +409,14 @@ class Sheru:
             first = True
             while True:                                    # keep listening while a follow-up is expected
                 if self.panel is not None:
-                    self.panel.set_status("🎙 listening…")
+                    self.panel.set_status("🎙 listening…" if first else "🎙 your turn — I'm listening")
                     if first:
                         self.panel._set_out("Listening…")
                 # first listen: 8s. follow-up: the armed window (>=6s) to START speaking, from AFTER Sheru spoke.
                 wait = 8.0 if first else max(getattr(self, "_followup_window", 6.0), 6.0)
+                if not first:
+                    log.info("ptt: follow-up window open %.0fs — say your next thing", wait)
+                    self._listen_cue()                # a soft 'your turn' tone so you know it's listening, eyes-free
                 audio = capture_once(max_wait=wait, cfg=(None if first else fu_cfg))   # stricter on follow-ups
                 self._followup_armed = False              # consume; handle_text re-arms if this reply invites one
                 if audio is None:
@@ -559,8 +563,13 @@ class Sheru:
 
     def _orb_tick(self) -> None:
         from . import audio
+        import math
+        import time as _t
         if self.orb is not None:
-            self.orb.set_level(audio.LEVEL["v"])
+            # gentle idle "breathing" floor so the orb is ALWAYS visibly present through the whole exchange —
+            # listening, Sheru speaking (mic closed -> level 0), and your-turn — never collapsing to nothing.
+            idle = 0.14 + 0.05 * (0.5 + 0.5 * math.sin(_t.monotonic() * 2.2))
+            self.orb.set_level(max(audio.LEVEL["v"], idle))
 
     def _stop_orb_driver(self) -> None:
         t = self._orb_timer
@@ -693,6 +702,15 @@ class Sheru:
             finally:
                 self._search_busy = False
         threading.Thread(target=_go, name="sheru-search", daemon=True).start()
+
+    def _listen_cue(self) -> None:
+        """A soft, short tone signalling 'your turn' when the follow-up mic opens — so you know it's listening
+        without watching the screen. Quiet + brief so it doesn't get recorded as speech."""
+        try:
+            import subprocess
+            subprocess.Popen(["afplay", "-v", "0.2", "/System/Library/Sounds/Pop.aiff"])
+        except Exception:
+            pass
 
     def allow_followup(self, seconds: float = 6.0) -> None:
         """Arm a follow-up: after Sheru finishes SPEAKING, keep the mic open ~`seconds` (min 6) for the user to

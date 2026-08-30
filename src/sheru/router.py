@@ -111,6 +111,9 @@ class Router:
         (re.compile(r"^(?:use|switch to|open)\s+(brave|google chrome|chrome|zen|firefox)(?:\s+browser)?$"), "use_browser"),
         (re.compile(r"^(?:use|switch to|go to|open)\s+(?:the\s+)?(.+?)(?:['’]s)?\s+profile\b.*$"), "profile"),
         (re.compile(r"^(?:open|show(?:\s+me)?|pull up|bring up|go to)\s+(?:a\s+|an\s+|the\s+)?wikipedia\s+(?:page\s+|article\s+|entry\s+)?(?:on|about|for|of|regarding)\s+(.+)$"), "wiki_open"),
+        # local dictionary (macOS built-in) — instant, offline definition
+        (re.compile(r"^(?:define|definition of|meaning of|what'?s\s+(?:the\s+)?(?:meaning|definition)\s+of|what is the meaning of)\s+(.+?)$"), "define"),
+        (re.compile(r"^what\s+does\s+(?:the\s+word\s+)?(.+?)\s+mean$"), "define"),
         (re.compile(r"^(?:open|launch|start|run)\s+(?:the\s+)?(?!(?:a\s+|an\s+|my\s+)?(?:timer|alarm|stopwatch|reminder|countdown)\b)(?:a\s+|an\s+|my\s+)?(.+?)(?:\s+(?:app|application|browser))?$"), "open"),
         (re.compile(r"^(?:quit|close|kill)\s+(?!all (?:my|the|your) )(?:the\s+)?(.+?)(?:\s+(?:app|application))?$"), "quit"),
         (re.compile(r"^(?:switch|go|jump)\s+to\s+(?:the\s+)?(.+?)\s+profile$"), "profile"),
@@ -260,6 +263,14 @@ class Router:
             return Result(browser_agent.play_youtube(next((x for x in g if x), "").strip()), followup=True)
         if kind == "yt_music":
             return Result(browser_agent.play_music(g[0].strip()), followup=True)
+        if kind == "define":
+            from .actions import dictionary
+            word = g[0].strip().strip("?.!,'\"")
+            d = dictionary.define(word)
+            if d:                                          # instant, local, offline — then invite a follow-up
+                return Result(f"{word}: {d}. Is that enough, or would you like more?", followup=True)
+            return Result("Let me look that up.", search=location.localize(f"definition of {word}"),
+                          tier=1, followup=True)           # not in the dictionary -> local web search
         if kind == "wiki_open":
             import urllib.parse as _u
             topic = g[0].strip().rstrip("?.!")

@@ -130,6 +130,11 @@ check("Devanagari romanized for TTS (no gibberish)", _for_speech("गाना �
 check("English speech unchanged by romanizer", _for_speech("play a song") == "play a song")
 check("phonemizer patched to remove-flags", getattr(_pb.EspeakBackend, "_sheru_no_lang_switch", False) is True)
 
+print("dictionary — local macOS definitions:")
+from sheru.actions import dictionary as _D
+check("define serendipity (local, offline)", (_D.define("serendipity") or "").startswith("noun."))
+check("unknown word -> None (falls to search)", _D.define("asdfghjkl") is None)
+
 print(f"\n{'ALL PASS' if not fails else str(len(fails)) + ' FAILED: ' + ', '.join(fails)}  "
       f"({'0' if not fails else len(fails)} of many)")
 sys.exit(1 if fails else 0)
