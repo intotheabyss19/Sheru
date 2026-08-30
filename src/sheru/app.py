@@ -124,6 +124,12 @@ class Sheru:
                 res.followup = True
         if res.speech:
             sink(res.speech)
+        if getattr(res, "open_panel", False):          # input impractical by voice (a link) -> reveal the chat to type
+            try:
+                from PyObjCTools import AppHelper
+                AppHelper.callAfter(self.show_type_panel)
+            except Exception:
+                pass
         # Keep the mic open for a natural follow-up ONLY after conversational replies (answers/chat) or when the
         # handler opted in — NOT after fire-and-forget actions (open/terminal/play), where re-arming invited a
         # mic-echo loop that spawned duplicate windows.

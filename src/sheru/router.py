@@ -57,6 +57,7 @@ class Result:
     search: str | None = None     # query -> LOCAL web-search + summarize (on-device); escalate to Claude only if it can't answer
     draft: dict | None = None     # {recipient, gist, app} -> app starts a draft/confirm flow
     call: dict | None = None      # {recipient, video, app} -> app starts a CALL confirm flow (never auto-dials)
+    open_panel: bool = False      # ask the app to reveal the chat panel (for input impractical by voice, e.g. a link)
     resolve_song: str | None = None  # query the app should resolve via Claude, then play
     played: str | None = None        # the song query just played (so "no, wrong song" can re-resolve)
     feedback: str | None = None      # explicit good/bad rating on the PREVIOUS action (judges Sheru's workings)
@@ -129,6 +130,8 @@ class Router:
         (re.compile(r".*\b(?:exchange rate|conversion rate)\b.*|.*\b\d+(?:\.\d+)?\s*(?:euros?|dollars?|pounds?|yen|rupees?|usd|eur|gbp|inr|jpy)\b.*\b(?:in|to|into)\b\s*(?:inr|usd|eur|gbp|jpy|rupees?|dollars?|euros?|pounds?|yen)\b.*"), "current"),
         (re.compile(r"^(?:search|look up|google|find)\s+(?:for\s+)?(.+?)\s+(?:and|then)\s+summari[sz]e.*$"), "search_summarize"),
         (re.compile(r"^summari[sz]e(?:\s+(?:me|it|that|this|them|the results|the search|those))?(?:\s+(.+))?$"), "summarize"),
+        # 'how to X' / 'how do I X' -> a YouTube tutorial (NOT play_song; 'how to play raag yaman' isn't a track)
+        (re.compile(r"^how\s+(?:do i|to|can i|do you|does one|should i)\s+(.+?)(?:\s+on\s+you\s?tube)?[?.]*$"), "howto"),
         # teach / play a Spotify PLAYLIST (before play_song, which would treat 'X playlist' as a track)
         (re.compile(r"^(?:remember\s+)?(?:that\s+)?(?:my\s+)?(.+?)\s+playlist\s+is\s+(https?://\S+|spotify:\S+)$"), "remember_playlist"),
         (re.compile(r"^remember\s+(?:my\s+|the\s+)?(.+?)\s+playlist\s+(https?://\S+|spotify:\S+)$"), "remember_playlist"),
@@ -264,6 +267,10 @@ class Router:
             config.set_reply_lang(lang)
             return Result({"hi": "I'll reply in Hindi now.", "en": "I'll reply in English now.",
                            "auto": "I'll reply in whichever language you speak."}[lang])
+        if kind == "howto":
+            q = g[0].strip()
+            return Result(f"Here's a tutorial on {q}." if browser_agent.play_youtube(q + " tutorial")
+                          else f"I couldn't find a tutorial on {q}.", followup=True)
         if kind == "youtube":
             return Result(browser_agent.play_youtube(next((x for x in g if x), "").strip()), followup=True)
         if kind == "yt_music":
@@ -416,8 +423,10 @@ class Router:
             name = g[0].strip()
             r = music.play_playlist(name)
             if r == "__NEED_PLAYLIST__":
-                return Result(f"I don't have your {name} playlist saved yet. What's its Spotify link? "
-                              f"Say: '{name} playlist is <paste the link>'.", followup=True)
+                # can't paste a link by voice -> open the chat so it's mode-agnostic (type it once, remembered forever)
+                return Result(f"I don't have your {name} playlist saved yet. I'll open the chat — paste its "
+                              f"Spotify link there (type: {name} playlist is <link>) and I'll remember it.",
+                              open_panel=True, followup=True)
             return Result(r, followup=True)
         if kind == "play_song":
             q = g[0].strip()

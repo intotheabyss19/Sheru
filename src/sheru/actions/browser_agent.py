@@ -35,7 +35,13 @@ def _first_youtube_id(query: str, music: bool = False) -> str | None:
     try:
         html = requests.get(url, headers={"User-Agent": "Mozilla/5.0", "Accept-Language": "en-US,en"},
                             timeout=10).text
-        m = re.search(r'"videoId":"([\w-]{11})"', html)
+        # target a REAL search result (videoRenderer), not the first videoId — which is usually an ad or a
+        # Short/reel and gave random clips. Fall back to the generic match only if no proper result is found.
+        m = re.search(r'"videoRenderer":\{"videoId":"([\w-]{11})"', html)
+        if not m and music:
+            m = re.search(r'"musicResponsiveListItemRenderer".{0,400}?"videoId":"([\w-]{11})"', html, re.S)
+        if not m:
+            m = re.search(r'"videoId":"([\w-]{11})"', html)
         return m.group(1) if m else None
     except Exception:
         return None
