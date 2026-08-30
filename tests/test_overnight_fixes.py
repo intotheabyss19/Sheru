@@ -131,6 +131,13 @@ check("'reduce the volume by 20%' -> volume_by", r.route("reduce the volume by 2
 check("'lower the volume by 10%' -> volume_by", r.route("lower the volume by 10%").tool == "volume_by")
 check("'set volume to 20%' NOT escalated to Claude", r.route("set volume to 20%").tier == 0)
 
+print("shortcuts bridge — 'run shortcut X' routes to run_shortcut, doesn't shadow open/play:")
+check("'run shortcut Wake Sheru' -> run_shortcut", r.route("run shortcut Wake Sheru").tool == "run_shortcut")
+check("'run the shortcut Focus On' -> run_shortcut", r.route("run the shortcut Focus On").tool == "run_shortcut")
+check("'run Set Focus shortcut' -> run_shortcut", r.route("run Set Focus shortcut").tool == "run_shortcut")
+check("'run a bath' is NOT run_shortcut (stays open)", r.route("run a bath").tool != "run_shortcut")
+check("'open spotify' still opens (unaffected)", r.route("open spotify").tool == "open")
+
 print("typing/dictation mode — routing + disable-phrase detection:")
 import re as _re
 _t1 = r.route("open Gaurav's chat and activate typing mode")

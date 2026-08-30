@@ -121,6 +121,7 @@ class Router:
         # local dictionary (macOS built-in) — instant, offline definition
         (re.compile(r"^(?:define|definition of|meaning of|what'?s\s+(?:the\s+)?(?:meaning|definition)\s+of|what is the meaning of)\s+(.+?)$"), "define"),
         (re.compile(r"^what\s+does\s+(?:the\s+word\s+)?(.+?)\s+mean$"), "define"),
+        (re.compile(r"^run(?:\s+the)?\s+shortcut\s+(.+)$|^run(?:\s+the)?\s+(.+?)\s+shortcut$"), "run_shortcut"),
         (re.compile(r"^(?:open|launch|start|run)\s+(?:the\s+)?(?!(?:a\s+|an\s+|my\s+)?(?:timer|alarm|stopwatch|reminder|countdown)\b)(?:a\s+|an\s+|my\s+)?(.+?)(?:\s+(?:app|application|browser))?$"), "open"),
         (re.compile(r"^(?:quit|close|kill)\s+(?!all (?:my|the|your) )(?:the\s+)?(.+?)(?:\s+(?:app|application))?$"), "quit"),
         (re.compile(r"^(?:switch|go|jump)\s+to\s+(?:the\s+)?(.+?)\s+profile$"), "profile"),
@@ -344,6 +345,17 @@ class Router:
             return Result(system.media("pause"))
         if kind == "mute":
             return Result(system.mute(g[0] == "mute"))
+        if kind == "run_shortcut":
+            from .actions import shortcuts as _sc
+            name = next((x for x in g if x), "").strip()
+            resolved = _sc.resolve_name(name)
+            if not resolved:
+                return Result(f"I don't see a shortcut called {name}. Create it in the Shortcuts app first.",
+                              tool="run_shortcut")
+            out = _sc.run_shortcut(resolved)
+            if out is None:
+                return Result(f"I couldn't run the {resolved} shortcut.", tool="run_shortcut")
+            return Result((f"Done. {out}" if out else f"Ran {resolved}."), tool="run_shortcut")
         if kind == "media":
             cmd = {"resume": "play", "skip": "next", "back": "previous"}.get(g[0], g[0])
             return Result(system.media(cmd))
