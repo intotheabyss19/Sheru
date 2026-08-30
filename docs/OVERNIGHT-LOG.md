@@ -20,7 +20,9 @@ Times are local. Newest at the bottom.
 - **Housekeeping**: Apache-2.0 license, ~18 focused commits on `overnight` (FF-merged to `main`, both pushed).
   **Sheru is running on the base model with all fixes live.** Nothing left playing/open from testing.
 - **Try when you wake**: broken-English commands, "what's 100 dollars in rupees", "who is <someone>",
-  "what's the news", "set an alarm for 7 in the morning", "five times five", "remind me in half an hour".
+  "what's the news", "set an alarm for 7 in the morning", "five times five", "remind me in half an hour",
+  "open a wikipedia page on black holes".
+- ⚠️ **Heads-up: I left system volume at 8%** (your "≤10% during testing" rule) — turn it up to hear Sheru.
 
 | Start | End | What I did | Result |
 |---|---|---|---|
