@@ -142,3 +142,12 @@ volume/brightness preprocessing could rewrite number-words inside a message body
 now skips messaging commands; (5) brightness now clamps 0–100. All regression-tested. **Also cleaned up test
 side-effects** (I'd been running real `route()` calls that played Spotify + opened YouTube videos in Brave — paused
 Spotify, quit Brave; captured the lesson so it stops). Sheru restarted on the fixed code, healthy.
+
+**03:50–04:15 — window management by voice (via Rectangle).** "maximize this window", "make it full screen",
+"left/right/top/bottom half", "move window left", "center this window" → Rectangle's URL scheme. Rectangle was
+already installed; I enabled its URL scheme so this works with **no setup** (unlike Focus/brightness, which need
+you to create helper shortcuts). Grammar is keyword-anchored so it never false-fires. Restarted Sheru. **All three
+queued Shortcuts items are now built** (run-shortcut bridge · Focus/DND · window management) plus brightness.
+Deliberately left for later (both need setup I can't do or safely test at night): **OCR** ("read this screen" via a
+Extract-Text-from-Image shortcut) and **proactive automations** (battery/time/app triggers). Say the word when
+you're up and I'll wire those too.
