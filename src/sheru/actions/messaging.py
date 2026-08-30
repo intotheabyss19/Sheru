@@ -138,6 +138,32 @@ def send_whatsapp(handle: str, text: str, dry_run: bool = False) -> bool:
     return True
 
 
+def call_whatsapp(handle: str, video: bool = False, dry_run: bool = False) -> bool:
+    """Open the contact's WhatsApp chat, then place a call by driving WhatsApp's own Call ▸ Voice/Video Call
+    menu item (robust — no coordinate-clicking). Fires ONLY while WhatsApp is confirmed frontmost. dry_run
+    opens the chat and stops WITHOUT calling (used to verify the flow without ringing anyone)."""
+    digits = re.sub(r"\D", "", handle)
+    subprocess.run(["open", f"whatsapp://send?phone={digits}"], check=False)
+    for _ in range(25):                        # wait up to ~5 s for WhatsApp to come forward on that chat
+        time.sleep(0.2)
+        if _frontmost() == "WhatsApp":
+            break
+    else:
+        return False
+    time.sleep(1.3)                            # let the conversation load + the Call menu enable
+    if dry_run:                                # verified up to the call — never actually rings
+        return True
+    if _frontmost() != "WhatsApp":             # re-verify right before triggering the call
+        return False
+    item = "Video Call" if video else "Voice Call"     # menu titles carry a U+200E prefix -> match by 'contains'
+    script = ('tell application "System Events" to tell process "WhatsApp" to '
+              'click (first menu item of menu 1 of '
+              '(first menu bar item of menu bar 1 whose name contains "Call") '
+              f'whose name contains "{item}")')
+    r = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+    return r.returncode == 0
+
+
 def prefill(handle: str, text: str, app: str = "messages", dry_run: bool = False) -> str:
     """Open the conversation pre-filled (user presses send). Returns the URL used."""
     if app == "whatsapp":

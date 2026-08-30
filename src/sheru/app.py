@@ -102,6 +102,8 @@ class Sheru:
             return res.speech
         if getattr(res, "draft", None):
             return self._start_draft(res.draft, sink)
+        if getattr(res, "call", None):
+            return self._start_call(res.call, sink)
         if getattr(res, "search", None):
             if res.speech:
                 sink(res.speech)                 # "Let me check." ack
@@ -229,6 +231,43 @@ class Sheru:
         self._present_draft(who, draft, sink)
         return draft
 
+    def _start_call(self, d: dict, sink) -> str:
+        """Set up a WhatsApp call and ask to confirm — NEVER auto-dials. Confirm in chat -> _place_call."""
+        recipient = d["recipient"]
+        video = bool(d.get("video"))
+        contact = messaging.resolve_contact(recipient)
+        if contact is None:
+            self.pending = {"kind": "call_need_number", "recipient": recipient, "video": video,
+                            "app": "whatsapp", "ts": time.time(), "sink": sink}
+            self._save_pending()
+            msg = f"I don't have {recipient}'s number saved. What's their WhatsApp number (with country code)?"
+            sink(msg)
+            return msg
+        who = contact.get("name") or recipient
+        self.pending = {"kind": "call", "recipient": recipient, "contact": contact, "video": video,
+                        "app": "whatsapp", "ts": time.time(), "sink": sink}
+        self._save_pending()
+        verb = "video-call" if video else "call"
+        msg = f"Ready to {verb} {who} on WhatsApp. Say 'yes' to place the call, or 'cancel'."
+        sink(msg)
+        return msg
+
+    def _place_call(self, sink) -> str:
+        p = self.pending
+        self.pending = None
+        self._save_pending()
+        c = p.get("contact")
+        if not c or not c.get("handle"):
+            sink(f"I couldn't find {p['recipient']}'s number, so I can't place the call.")
+            return "no-contact"
+        who = c.get("name") or p["recipient"]
+        sink(f"{'Video-calling' if p.get('video') else 'Calling'} {who} on WhatsApp…")
+        ok = messaging.call_whatsapp(c["handle"], video=p.get("video", False), dry_run=self.dry_send)
+        if not ok:
+            sink("I opened the chat but couldn't start the call — tap the call button in WhatsApp to connect.")
+            return "call-failed"
+        return "calling"
+
     def _handle_pending(self, text: str, sink) -> str:
         p = self.pending
         if p.get("kind") == "artifact":
@@ -236,6 +275,25 @@ class Sheru:
         if p.get("kind") == "need_number":
             return self._handle_number(text, sink)
         low = text.strip().lower().rstrip(".!")
+        if p.get("kind") == "call_need_number":
+            if low in self.DENY or low.startswith(("no", "cancel", "forget", "never", "don't", "dont")):
+                self.pending = None; self._save_pending(); sink("Okay, no call."); return "cancelled"
+            mnum = re.search(r"\+?\d[\d\s\-]{6,}\d", text)
+            if not mnum:
+                sink(f"I need {p['recipient']}'s number with country code (like +91…). What is it?")
+                return "need-number"
+            from .actions import contacts_book
+            contacts_book.add(p["recipient"].title(), mnum.group(0))
+            d = {"recipient": p["recipient"], "video": p.get("video", False), "app": "whatsapp"}
+            self.pending = None
+            return self._start_call(d, sink)
+        if p.get("kind") == "call":
+            if low in self.CONFIRM or low.startswith(("yes", "call", "ring", "go ahead", "do it", "yeah", "yep", "sure")):
+                return self._place_call(sink)
+            if low in self.DENY or low.startswith(("no", "cancel", "don't", "dont", "forget", "scrap", "stop")):
+                self.pending = None; self._save_pending(); sink("Okay, no call."); return "cancelled"
+            sink("Say 'yes' to place the call, or 'cancel'.")
+            return "await-call"
         if low in self.CONFIRM or low.startswith(("send", "yes", "go ahead", "do it")):
             return self._send_pending(sink)
         if low in self.DENY or low.startswith(("no", "cancel", "don't", "dont", "forget", "scrap")):

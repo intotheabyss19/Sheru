@@ -29,6 +29,8 @@ TOOLS = [
         "parameters": {"type": "object", "properties": {"query": {"type": "string", "description": "song and/or artist name"}}, "required": ["query"]}}},
     {"type": "function", "function": {"name": "draft_message", "description": "Draft and send a text/WhatsApp message to a person; use when the user wants to message/text someone",
         "parameters": {"type": "object", "properties": {"recipient": {"type": "string"}, "message": {"type": "string", "description": "the gist/intent of what to say"}, "app": {"type": "string", "enum": ["messages", "whatsapp"]}}, "required": ["recipient", "message"]}}},
+    {"type": "function", "function": {"name": "call_contact", "description": "Place a WhatsApp voice or video CALL to a person (NOT a text message). Use for 'call X', 'ring X', 'phone X', 'video call X', 'give X a call'. Sheru asks to confirm before it dials.",
+        "parameters": {"type": "object", "properties": {"recipient": {"type": "string"}, "video": {"type": "boolean", "description": "true for a video call, false/omit for a voice call"}}, "required": ["recipient"]}}},
     {"type": "function", "function": {"name": "set_address", "description": "Remember how to ADDRESS/greet a specific contact in messages — e.g. a contact saved under a nickname who should be greeted by a different name. Use for 'address X as Y', 'call X Y in messages', 'greet X as Y', 'refer to X as Y'.",
         "parameters": {"type": "object", "properties": {"name": {"type": "string", "description": "the contact (as the user refers to them)"}, "address": {"type": "string", "description": "how to address them in messages, e.g. Madam"}}, "required": ["name", "address"]}}},
 ]

@@ -113,6 +113,15 @@ check("'remind me in half an hour' schedules (mocked)", "remind" in (r.route("re
 check("'open a wikipedia page on X' -> wiki_open (not open_app)", r.route("open a wikipedia page on the sun").tool == "wiki_open")
 check("'open spotify' still -> open_app", r.route("open spotify").tool == "open")
 
+print("router — WhatsApp calling (confirm-first; routing only, no calls placed):")
+check("'call satya on whatsapp' -> call intent", r.route("call satya on whatsapp").call is not None)
+check("'call satya on whatsapp' recipient == satya", (r.route("call satya on whatsapp").call or {}).get("recipient") == "satya")
+check("'video call satya' -> video=True", (r.route("video call satya").call or {}).get("video") is True)
+check("'ring gaurav choudhary' -> call intent", r.route("ring gaurav choudhary").call is not None)
+check("'give satya a call' -> call intent", r.route("give satya a call").call is not None)
+check("'call claude' is NOT a call", r.route("call claude").call is None)
+check("'call it a day' is NOT a call", r.route("call it a day").call is None)
+
 print(f"\n{'ALL PASS' if not fails else str(len(fails)) + ' FAILED: ' + ', '.join(fails)}  "
       f"({'0' if not fails else len(fails)} of many)")
 sys.exit(1 if fails else 0)

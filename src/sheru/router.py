@@ -56,6 +56,7 @@ class Result:
     args: dict | None = None
     search: str | None = None     # query -> LOCAL web-search + summarize (on-device); escalate to Claude only if it can't answer
     draft: dict | None = None     # {recipient, gist, app} -> app starts a draft/confirm flow
+    call: dict | None = None      # {recipient, video, app} -> app starts a CALL confirm flow (never auto-dials)
     resolve_song: str | None = None  # query the app should resolve via Claude, then play
     played: str | None = None        # the song query just played (so "no, wrong song" can re-resolve)
     feedback: str | None = None      # explicit good/bad rating on the PREVIOUS action (judges Sheru's workings)
@@ -146,6 +147,10 @@ class Router:
         (re.compile(r"^what\s+did\s+(.+?)\s+(?:say|reply|text|send|write|message)\b.*$"), "read_chat"),
         (re.compile(r"^(?:read|check|show me)\s+(?:me\s+)?(?:the\s+|my\s+|her\s+|his\s+|their\s+)?(?:whatsapp\s+)?(?:conversation|chat|replies|reply|messages?|texts?)(?:\s+(?:with|from)\s+(.+))?$"), "read_chat"),
         (re.compile(r"^(?:what'?s|any)\s+(?:her|his|their|the)\s+(?:latest\s+)?(?:reply|response|messages?)\b.*$"), "read_chat"),
+        # place a WhatsApp CALL (name only, no message) — app shows a Call/Cancel confirm, never auto-dials
+        (re.compile(r"^(?:video[\s-]?call|make a video call to|start a video call with)\s+(?!on\b)([a-z][\w'’.\-]*(?:\s+(?!on\b)[a-z][\w'’.\-]*){0,2})(?:\s+on\s+whats\s?app)?$"), "call_video"),
+        (re.compile(r"^(?:call up|voice[\s-]?call|make a call to|call|ring|phone|dial)\s+(?!claude\b|the trainer\b|a trainer\b|back\b|it\b|off\b|me\b|9\d\d\b|1\d\d\b)([a-z][\w'’.\-]*(?:\s+(?!on\b)[a-z][\w'’.\-]*){0,2})(?:\s+on\s+whats\s?app)?$"), "call_voice"),
+        (re.compile(r"^give\s+([a-z][\w'’.\-]*(?:\s+[a-z][\w'’.\-]*){0,1})\s+a\s+(?:call|ring|buzz)(?:\s+on\s+whats\s?app)?$"), "call_voice"),
         (re.compile(r"^(?:message|text|msg|whatsapp|whats app|send)\s+(?:a\s+(?:message|text)\s+)?(?:to\s+)?([a-z][\w'’.\-]*(?:\s+[a-z][\w'’.\-]*){0,2})\s+(?:that|saying|to say|to tell (?:him|her|them)|about)\s+(.+)$"), "message"),
         (re.compile(r"^(?:message|text|msg|whatsapp|whats app|send)\s+(?:a\s+(?:message|text)\s+)?to\s+([a-z][\w'’.\-]*(?:\s+[a-z][\w'’.\-]*){0,2}?)\s+(.+)$"), "message"),
         (re.compile(r"^(?:message|text|msg|whatsapp|whats app)\s+(\w+)\s+(.+)$"), "message"),
@@ -404,6 +409,9 @@ class Router:
                 if c and c.get("handle"):
                     return Result(whatsapp_read.read_chat_with(c["handle"]), followup=True)
             return Result(whatsapp_read.read_open_chat(), followup=True)
+        if kind in ("call_voice", "call_video"):
+            who = re.sub(r"\s+on\s+whats\s?app$", "", g[0].strip(), flags=re.I).strip()
+            return Result("", call={"recipient": who, "video": kind == "call_video", "app": "whatsapp"})
         if kind == "message":
             if re.search(r"whats\s?app", m.group(0)):
                 app_kind = "whatsapp"
@@ -460,6 +468,8 @@ class Router:
                     return Result("Let me find that song…", resolve_song=a["query"], followup=True)
             elif tool == "draft_message":
                 return Result("", draft={"recipient": a.get("recipient", ""), "gist": a.get("message", a.get("gist", "")), "app": a.get("app") or _default_msg_app()})
+            elif tool == "call_contact":
+                return Result("", call={"recipient": a.get("recipient", ""), "video": bool(a.get("video")), "app": "whatsapp"})
             elif tool == "set_address":
                 from .actions import contacts_book
                 contacts_book.set_address(a["name"], a["address"])
