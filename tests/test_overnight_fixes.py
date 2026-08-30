@@ -126,6 +126,8 @@ print("tts — phonemizer language-switch fix (names like 'Satya' don't become g
 from sheru.tts import _patch_phonemizer_language_switch
 _patch_phonemizer_language_switch()
 import phonemizer.backend as _pb
+check("Devanagari romanized for TTS (no gibberish)", _for_speech("गाना बजाओ") == "gana bajao")
+check("English speech unchanged by romanizer", _for_speech("play a song") == "play a song")
 check("phonemizer patched to remove-flags", getattr(_pb.EspeakBackend, "_sheru_no_lang_switch", False) is True)
 
 print(f"\n{'ALL PASS' if not fails else str(len(fails)) + ' FAILED: ' + ', '.join(fails)}  "

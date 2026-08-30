@@ -132,12 +132,16 @@ def reply_directive(text: str = "") -> str:
     """Appended to every system prompt so the reply language matches what the user spoke. In 'auto' mode we PIN
     the language by the INPUT'S SCRIPT here in code (deterministic) rather than asking the small local model to
     evaluate 'reply in their language' — which it fails, answering English questions in Hindi."""
+    # Reply in ROMAN/LATIN script (Hinglish), never Devanagari — the English TTS voice can't pronounce
+    # Devanagari and turns it into gibberish. 'gaana bajaa raha hoon', not 'गाना बजा रहा हूँ'.
     if REPLY_LANG == "hi":
-        return " Always reply in Hindi, using Devanagari script, however the user phrased the question."
+        return (" Always reply in Hindi, but WRITE IT IN ROMAN/LATIN SCRIPT (Hinglish) — e.g. 'theek hai, "
+                "gaana bajaa raha hoon'. NEVER use Devanagari script.")
     if REPLY_LANG == "en":
         return " Reply in English."
     if text and any("ऀ" <= c <= "ॿ" for c in text):     # the user's message contains Devanagari
-        return " The user spoke Hindi — reply in Hindi using Devanagari script."
+        return (" The user spoke Hindi — reply in Hindi but WRITE IT IN ROMAN/LATIN SCRIPT (Hinglish), e.g. "
+                "'haan, main sun raha hoon'. NEVER use Devanagari script.")
     return " The user spoke English — reply ONLY in English. Do not use Hindi or Devanagari."
 
 

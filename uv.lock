@@ -65,6 +65,15 @@ wheels = [
 ]
 
 [[package]]
+name = "backports-functools-lru-cache"
+version = "2.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/c0/dc/a1962ae19f83d2a92b8ac76ad2dfdeccf2748464f1560a51d343b9e2609a/backports.functools_lru_cache-2.0.0.tar.gz", hash = "sha256:dcbfa5e0dae8a014168807c9e026d33eead71df5af76c1fb78fd248bf07f6f99", size = 11578, upload-time = "2023-12-13T22:34:02.998Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c6/c6/4761a2ccb03d650ca803b11a7cdd69ff0696926d3fea218c8ca22c808448/backports.functools_lru_cache-2.0.0-py2.py3-none-any.whl", hash = "sha256:0a754323a46847735a112677fb8807b45f6d824d02a5795a50905218ac56a0d6", size = 6657, upload-time = "2023-12-13T22:34:00.587Z" },
+]
+
+[[package]]
 name = "blis"
 version = "1.3.3"
 source = { registry = "https://pypi.org/simple" }
@@ -932,6 +941,22 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/5f/f7/abb373e5757eaec4b922b92f97ec8d6d7e057cf06778247604fbc4e7c3f3/idna-3.19.tar.gz", hash = "sha256:5e0811a4383b21dc5838069f801c4fb62113b7447663d2530d2bd6e77b49bf15", size = 215237, upload-time = "2026-08-18T05:14:24.27Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/57/b0/0e52c878c53f245edd3a11020f20979b3f490f245af532c7cae3027754b5/idna-3.19-py3-none-any.whl", hash = "sha256:815e7be7a7806d54abb586dc943addc79e8b2ee16915059658cbeff4b1b43bf4", size = 68550, upload-time = "2026-08-18T05:14:22.343Z" },
+]
+
+[[package]]
+name = "indic-transliteration"
+version = "2.3.82"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "backports-functools-lru-cache" },
+    { name = "regex" },
+    { name = "roman" },
+    { name = "toml" },
+    { name = "tqdm" },
+    { name = "typer" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a2/c1/65ae96680758615e042415fb1d3a1e573c2419387205135501d96be97bb8/indic_transliteration-2.3.82-py3-none-any.whl", hash = "sha256:243b8a444f14c1a811c03ba07e8aa300da61a7c4172a45556fdce1d963038019", size = 162886, upload-time = "2026-04-06T10:48:04.426Z" },
 ]
 
 [[package]]
@@ -2522,6 +2547,15 @@ wheels = [
 ]
 
 [[package]]
+name = "roman"
+version = "5.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/9c/7c/3901b35ed856329bf98e84da8e5e0b4d899ea0027eee222f1be42a24ff3f/roman-5.2.tar.gz", hash = "sha256:275fe9f46290f7d0ffaea1c33251b92b8e463ace23660508ceef522e7587cb6f", size = 8185, upload-time = "2025-11-11T08:03:57.025Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/10/14/ea3cdd7276fcd731a9003fe4abeb6b395a38110ddff6a6a509f4ee00f741/roman-5.2-py3-none-any.whl", hash = "sha256:89d3b47400388806d06ff77ea77c79ab080bc127820dea6bf34e1f1c1b8e676e", size = 6041, upload-time = "2025-11-11T08:03:56.051Z" },
+]
+
+[[package]]
 name = "rpds-py"
 version = "2026.6.3"
 source = { registry = "https://pypi.org/simple" }
@@ -2909,6 +2943,7 @@ dependencies = [
     { name = "google-api-python-client" },
     { name = "google-auth" },
     { name = "google-auth-oauthlib" },
+    { name = "indic-transliteration" },
     { name = "misaki", extra = ["en"] },
     { name = "mlx-audio" },
     { name = "mlx-lm" },
@@ -2934,6 +2969,7 @@ requires-dist = [
     { name = "google-api-python-client", specifier = ">=2.199.0" },
     { name = "google-auth", specifier = ">=2.57.0" },
     { name = "google-auth-oauthlib", specifier = ">=1.4.1" },
+    { name = "indic-transliteration", specifier = ">=2.3.82" },
     { name = "misaki", extras = ["en"], specifier = ">=0.9.4" },
     { name = "mlx-audio", specifier = ">=0.5.0" },
     { name = "mlx-lm", specifier = ">=0.31.3" },
@@ -3317,6 +3353,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/6a/dd/631b21433c771b1382535326f0eca80b9c9cee2e64961dd993bc9ac4669e/tokenizers-0.23.1-cp310-abi3-win32.whl", hash = "sha256:93120a930b919416da7cd10a2f606ac9919cc69cacae7980fa2140e277660948", size = 2536263, upload-time = "2026-04-27T14:43:29.888Z" },
     { url = "https://files.pythonhosted.org/packages/97/c9/2553f72aaf65a2797d4229e37fa7fbe38ffbf3e32912d31bdd78b3323e59/tokenizers-0.23.1-cp310-abi3-win_amd64.whl", hash = "sha256:e7bfaf995c1bdbbd21d13539decb6650967013759318627d85daeb7881af16b7", size = 2798223, upload-time = "2026-04-27T14:43:28.51Z" },
     { url = "https://files.pythonhosted.org/packages/cd/2b/2be299bab55fc595e3d38567edb1a87f86e594842968fa9515a07bdcf422/tokenizers-0.23.1-cp310-abi3-win_arm64.whl", hash = "sha256:a26197957d8e4425dfba746315f3c425ea00cfa8367c5fbc4ec73447893dcea9", size = 2664127, upload-time = "2026-04-27T14:43:26.949Z" },
+]
+
+[[package]]
+name = "toml"
+version = "0.10.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/be/ba/1f744cdc819428fc6b5084ec34d9b30660f6f9daaf70eead706e3203ec3c/toml-0.10.2.tar.gz", hash = "sha256:b3bda1d108d5dd99f4a20d24d9c348e91c4db7ab1b749200bded2f839ccbe68f", size = 22253, upload-time = "2020-11-01T01:40:22.204Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/44/6f/7120676b6d73228c96e17f1f794d8ab046fc910d781c8d151120c3f1569e/toml-0.10.2-py2.py3-none-any.whl", hash = "sha256:806143ae5bfb6a3c6e736a764057db0e6a0e05e338b5630894a5f779cabb4f9b", size = 16588, upload-time = "2020-11-01T01:40:20.672Z" },
 ]
 
 [[package]]

@@ -12,6 +12,7 @@ dependencies = [
     "google-api-python-client>=2.199.0",
     "google-auth>=2.57.0",
     "google-auth-oauthlib>=1.4.1",
+    "indic-transliteration>=2.3.82",
     "misaki[en]>=0.9.4",
     "mlx-audio>=0.5.0",
     "mlx-lm>=0.31.3",

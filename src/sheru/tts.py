@@ -36,8 +36,27 @@ def _patch_phonemizer_language_switch() -> None:
         pass
 
 
+def _romanize(text: str) -> str:
+    """Devanagari -> Roman/Hinglish so the English voice speaks 'gaana bajaa raha hoon', not gibberish/'Russian'.
+    English text passes through untouched. Best-effort: keeps things intelligible, not academically perfect."""
+    if not any("ऀ" <= c <= "ॿ" for c in text):
+        return text
+    try:
+        import unicodedata
+        from indic_transliteration.sanscript import transliterate, DEVANAGARI, IAST
+        out = transliterate(text, DEVANAGARI, IAST)
+        out = "".join(c for c in unicodedata.normalize("NFKD", out) if not unicodedata.combining(c))
+        out = out.replace("~", "")                          # chandrabindu artifact
+        out = re.sub(r"[^\x00-\x7f]", "", out)              # drop any leftover non-ASCII
+        return re.sub(r"\s+", " ", out).strip()
+    except Exception:
+        return text                                         # never let transliteration failure mute Sheru
+
+
 def _for_speech(text: str) -> str:
-    """Strip markdown/code/URLs/emoji so nothing reads as 'asterisk asterisk' — Claude & search replies are markdown."""
+    """Romanize Devanagari (so it's pronounceable), then strip markdown/code/URLs/emoji so nothing reads as
+    'asterisk asterisk' — Claude & search replies are markdown."""
+    text = _romanize(text)
     t = re.sub(r"```.*?```", " ", text, flags=re.S)        # fenced code blocks
     t = t.replace("`", "")                                 # inline code backticks
     t = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", t)       # [text](url) / image -> text
