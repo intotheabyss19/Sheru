@@ -71,6 +71,23 @@ actions aren't reliably present on Mac (only listed as automation *triggers*) �
 
 ---
 
+## ALSO QUEUED (overnight): repackage Sheru.app as a PROPER bundle — fixes the menu-bar icon
+**Root cause (diagnosed 2026-08-31):** `/Applications/Sheru.app/Contents/MacOS/Sheru` is a bash shim that
+`exec`s `/Users/yash/Projects/Sheru/.venv/bin/sheru` — a binary *outside* the bundle. macOS then treats the
+running python as a **faceless/background process** with no proper GUI app identity, so the rumps `NSStatusItem`
+lays out with **zero height** (button exists, title/image set, `isVisible=True`, but `window.frame` height=0 →
+invisible). The exact same code shows the glyph fine when launched from a terminal (inherits the Aqua GUI
+session) or as a bare rumps app. Removing `LSUIElement` + runtime `setActivationPolicy` do NOT fix it; promoting
+to Regular makes it visible but steals focus / shows an empty menu bar. Confirmed via bare-rumps A/B tests.
+
+**Fix:** build a real bundle whose executable lives inside `Contents/MacOS` (py2app, or a bundled python +
+`__boot__` that runs `sheru.app:main`), so LaunchServices gives it proper app identity. Then the menu-bar SF
+Symbol (sparkles, already wired) shows on normal `.app` launch, and the existing runtime Accessory demotion drops
+the dock icon. **Verify:** launch via `open -a Sheru`, confirm the sparkles glyph renders and no dock icon; re-check
+mic/Accessibility TCC (a re-signed/rebuilt bundle = new cdhash may need re-granting). Interim today: Sheru is run
+from the shell (`nohup .venv/bin/sheru`) which shows sparkles but does NOT survive reboot — the login-item `.app`
+still hides it until repackaged.
+
 ## Also useful, callable via the same bridge (lower priority)
 `Get Text from PDF`, `Make PDF`, `Get Details of Appearance` (dark-mode state), `Get Network Details` /
 `Get Current IP Address`, `Get Items from RSS Feed`, `Find/New Reminder`, `Find Calendar Events`,
