@@ -555,6 +555,63 @@ class TypePanel(NSObject):
         AppHelper.callAfter(do)
 
     @objc.python_method
+    def show_call_card(self, recipient, video, on_call, on_cancel):
+        """A Call/Cancel confirm card (never dials on its own — Call runs the same confirm the gate expects)."""
+        def do():
+            if self._panel is None:
+                return
+            self._live = True
+            self._clear_card()
+            self._on_send, self._on_cancel = on_call, on_cancel
+            top = H - PAD - INPUT_H - 26
+            bottom = PAD + 8
+            ch = top - bottom
+            cw = W - 2 * PAD
+            card = NSView.alloc().initWithFrame_(NSMakeRect(PAD, bottom, cw, ch))
+            card.setWantsLayer_(True)
+
+            to = NSTextField.alloc().initWithFrame_(NSMakeRect(4, ch - 26, cw - 8, 20))
+            to.setBezeled_(False); to.setDrawsBackground_(False); to.setEditable_(False); to.setSelectable_(False)
+            to.setFont_(NSFont.systemFontOfSize_(13)); to.setTextColor_(NSColor.secondaryLabelColor())
+            to.setStringValue_("Call")
+            card.addSubview_(to)
+
+            bh = ch - 26 - 8 - 46
+            bubble = NSView.alloc().initWithFrame_(NSMakeRect(0, 48, cw, bh))
+            bubble.setWantsLayer_(True)
+            bubble.layer().setCornerRadius_(16.0)
+            bubble.layer().setBackgroundColor_(LOCAL_TINT.CGColor())
+            bubble.layer().setBorderWidth_(1.0)
+            bubble.layer().setBorderColor_(LOCAL_EDGE.CGColor())
+            icon = "📹" if video else "📞"
+            lbl = NSTextField.alloc().initWithFrame_(NSMakeRect(14, 0, cw - 28, bh))
+            lbl.setBezeled_(False); lbl.setDrawsBackground_(False); lbl.setEditable_(False); lbl.setSelectable_(False)
+            lbl.setFont_(NSFont.systemFontOfSize_(20)); lbl.setTextColor_(_rgba(0.96, 0.96, 0.97))
+            lbl.setAlignment_(NSTextAlignmentLeft)
+            lbl.cell().setWraps_(True)
+            lbl.setStringValue_(f"{icon}  {'Video-call' if video else 'Call'} {recipient} on WhatsApp?")
+            lbl.cell().setLineBreakMode_(NSLineBreakByWordWrapping)
+            bubble.addSubview_(lbl)
+            card.addSubview_(bubble)
+
+            call = NSButton.alloc().initWithFrame_(NSMakeRect(cw - 104, 6, 104, 32))
+            call.setTitle_("Call"); call.setBezelStyle_(1); call.setKeyEquivalent_("\r")
+            call.setTarget_(self); call.setAction_("cardSend:")
+            card.addSubview_(call)
+            cancel = NSButton.alloc().initWithFrame_(NSMakeRect(cw - 104 - 96, 6, 92, 32))
+            cancel.setTitle_("Cancel"); cancel.setBezelStyle_(1)
+            cancel.setTarget_(self); cancel.setAction_("cardCancel:")
+            card.addSubview_(cancel)
+
+            if self._scroll is not None:
+                self._scroll.setHidden_(True)
+            if self._quick is not None:
+                self._quick.setHidden_(True)
+            self._panel.contentView().addSubview_(card)
+            self._card = card
+        AppHelper.callAfter(do)
+
+    @objc.python_method
     def _clear_card(self):
         if getattr(self, "_card", None) is not None:
             self._card.removeFromSuperview()

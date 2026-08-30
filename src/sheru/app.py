@@ -249,8 +249,18 @@ class Sheru:
         self._save_pending()
         verb = "video-call" if video else "call"
         msg = f"Ready to {verb} {who} on WhatsApp. Say 'yes' to place the call, or 'cancel'."
-        sink(msg)
+        self._present_call(who, video, sink)
         return msg
+
+    def _present_call(self, who: str, video: bool, sink) -> None:
+        """Show a Call/Cancel card in the panel (typed mode), else ask by voice/text. Never dials on its own."""
+        if (self.panel is not None and not self._is_voice_sink(sink)
+                and getattr(self.panel, "is_visible", None) and self.panel.is_visible()):
+            self.panel.show_call_card(who, video,
+                                      on_call=lambda: self._panel_pending("yes"),
+                                      on_cancel=lambda: self._panel_pending("cancel"))
+        else:
+            sink(f"Ready to {'video-call' if video else 'call'} {who} on WhatsApp. Say 'yes' to call, or 'cancel'.")
 
     def _place_call(self, sink) -> str:
         p = self.pending
