@@ -58,6 +58,7 @@ class Result:
     draft: dict | None = None     # {recipient, gist, app} -> app starts a draft/confirm flow
     call: dict | None = None      # {recipient, video, app} -> app starts a CALL confirm flow (never auto-dials)
     open_panel: bool = False      # ask the app to reveal the chat panel (for input impractical by voice, e.g. a link)
+    typing: dict | None = None    # {on, recipient, app} -> app enters TYPING mode (speak -> type into the active field)
     resolve_song: str | None = None  # query the app should resolve via Claude, then play
     played: str | None = None        # the song query just played (so "no, wrong song" can re-resolve)
     feedback: str | None = None      # explicit good/bad rating on the PREVIOUS action (judges Sheru's workings)
@@ -81,6 +82,9 @@ class Router:
         (re.compile(r"^(?:start|turn on|enable|resume)\s+recording\b.*"), "rec_on"),
         (re.compile(r"^(?:stop|pause|halt)\s+(?:the\s+|this\s+|that\s+|my\s+)?(?:music|song|playback|track|video|audio)\b.*$"), "media_pause"),
         (re.compile(r"^(?:stop|cancel|never ?mind|shut up|quiet|enough)\b|^that'?s enough\b|^okay,? that'?s enough\b"), "stop"),
+        # TYPING / dictation mode — speak and Sheru types it into the active field (before the generic 'open' rule)
+        (re.compile(r"^(?:open|go to|pull up|start)\s+(.+?)(?:'?s)?\s+(?:chat|conversation|whats\s?app|messages?)\s+and\s+(?:then\s+)?(?:activate|enable|start|turn on|begin|go into)\s+(?:the\s+)?(?:typing|dictation|type|hands\s?free)\s+mode$"), "typing_open"),
+        (re.compile(r"^(?:activate|enable|start|turn on|begin|go into|switch to)\s+(?:the\s+)?(?:typing|dictation|type|hands\s?free)\s+mode$"), "typing_on"),
         # natural ways to END the conversation — a brief warm ack, and NO follow-up armed so the mic loop stops
         (re.compile(r"^(?:no(?:pe)?|no thanks|no thank you|nothing(?:\s+else)?|that(?:'?s| is| will be| would be) (?:all|it|everything)|i'?m (?:good|done|fine|set|all set)|all good|we'?re good|that (?:will|would) be all|thank you(?:\s+sheru)?|thanks(?:\s+sheru)?|thanks a lot|thank you so much|bye(?:\s+sheru)?|goodbye|see (?:you|ya)|good ?night(?:\s+sheru)?)[.! ]*$"), "end_convo"),
         (re.compile(r"^(?:that (?:was|is)\s+|you (?:did|were)\s+)?(?:very |really |so )?(good|great|perfect|nice|excellent|awesome|well done|correct)\b\.?$"), "feedback_good"),
@@ -210,6 +214,10 @@ class Router:
         if kind == "end_convo":                            # a warm sign-off; no follow-up -> the mic loop ends
             import random
             return Result(random.choice(["Anytime.", "Sure thing.", "You got it.", "Happy to help.", "Okay!"]))
+        if kind == "typing_open":
+            return Result("", typing={"on": True, "recipient": g[0].strip(), "app": "whatsapp"})
+        if kind == "typing_on":
+            return Result("", typing={"on": True, "recipient": None, "app": None})
         if kind == "feedback_good":
             strong = bool(re.search(r"\bvery\b|\bperfect\b|\bexcellent\b|\bawesome\b", m.group(0)))
             return Result("Awesome, thanks!" if strong else "Thanks!", feedback="positive-strong" if strong else "positive")

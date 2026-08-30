@@ -51,6 +51,7 @@ class Sheru:
         self._orb_timer = None       # NSTimer driving the orb from the live mic level
         self._orb_style = None       # which style the current orb was built with
         self.dry_send = False        # tests set True to avoid sending real messages     # skip Claude Code until this time after a hard failure
+        self._typing_mode = False    # True while in hands-free TYPING mode: spoken words get typed into the active field
 
     # ---- one command end-to-end -------------------------------------------------
     CONFIRM = {"send", "send it", "yes", "yeah", "yep", "confirm", "go ahead", "do it", "sure", "okay send", "ok send"}
@@ -68,6 +69,15 @@ class Sheru:
             alarms.stop_ring()
             sink("Alarm off.")
             return "alarm-off"
+        if self._typing_mode:                              # hands-free TYPING: type what was said, or exit the mode
+            low = re.sub(r"[.!?]+$", "", text.strip().lower())
+            if re.search(r"\b(disable|deactivate|stop|exit|turn off|end|quit|close)\s+(?:the\s+)?(?:typing|dictation|type|hands\s?free)\s*mode\b", low) \
+                    or low in ("stop typing", "disable typing", "typing off", "exit typing", "done typing"):
+                self._typing_mode = False
+                sink("Typing mode off.")
+                return "typing-off"
+            self._type_and_send(text)
+            return "typed"
         if self.pending is not None:
             return self._handle_pending(text, sink)
         import re as _re
@@ -104,6 +114,8 @@ class Sheru:
             return self._start_draft(res.draft, sink)
         if getattr(res, "call", None):
             return self._start_call(res.call, sink)
+        if getattr(res, "typing", None):
+            return self._start_typing(res.typing, sink)
         if getattr(res, "search", None):
             if res.speech:
                 sink(res.speech)                 # "Let me check." ack
@@ -290,6 +302,51 @@ class Sheru:
             sink("I opened the chat but couldn't start the call — tap the call button in WhatsApp to connect.")
             return "call-failed"
         return "calling"
+
+    def _start_typing(self, t: dict, sink) -> str:
+        """Enter hands-free TYPING mode: from now on spoken words get typed into the focused field.
+        If a recipient is named, open their WhatsApp chat first so the input is focused. Needs Accessibility."""
+        import subprocess
+        recipient = t.get("recipient")
+        if recipient:
+            contact = messaging.resolve_contact(recipient)
+            if contact and contact.get("handle"):
+                digits = re.sub(r"\D", "", contact["handle"])
+                subprocess.run(["open", f"whatsapp://send?phone={digits}"], check=False)
+                who = contact.get("name") or recipient
+                time.sleep(1.6)                       # let the chat load and focus the message field
+                self._typing_mode = True
+                msg = f"Typing mode on for {who}. Say what you want to send. Say 'disable typing mode' to stop."
+            else:
+                self._typing_mode = True              # no chat to open, but honour the mode into whatever's focused
+                msg = (f"I don't have {recipient}'s chat saved, so open it yourself. "
+                       "Typing mode is on — say 'disable typing mode' to stop.")
+        else:
+            self._typing_mode = True
+            msg = "Typing mode on. I'll type what you say into the active window. Say 'disable typing mode' to stop."
+        sink(msg)
+        return msg
+
+    def _type_and_send(self, text: str) -> None:
+        """Type spoken text into the frontmost app's focused field, then Return to send IF it's a chat app.
+        In a document, Return would just be a newline, so we only auto-send in messaging apps. Needs Accessibility."""
+        import subprocess
+        if self.dry_send:                             # tests: don't actually emit synthetic keystrokes
+            logging.info("typing-mode (dry): %r", text)
+            return
+        safe = text.replace("\\", "\\\\").replace('"', '\\"')
+        subprocess.run(["osascript", "-e", f'tell application "System Events" to keystroke "{safe}"'],
+                       capture_output=True)
+        try:
+            front = subprocess.run(
+                ["osascript", "-e",
+                 'tell application "System Events" to name of first application process whose frontmost is true'],
+                capture_output=True, text=True).stdout.strip().lower()
+        except Exception:
+            front = ""
+        if front in ("whatsapp", "messages", "telegram", "discord", "slack", "signal"):
+            subprocess.run(["osascript", "-e", 'tell application "System Events" to key code 36'],  # Return -> send
+                           capture_output=True)
 
     def _handle_pending(self, text: str, sink) -> str:
         p = self.pending
