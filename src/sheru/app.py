@@ -411,7 +411,10 @@ class Sheru:
                     self.panel.set_status("🎙 listening…")
                     if first:
                         self.panel._set_out("Listening…")
-                audio = capture_once(max_wait=8.0, cfg=(None if first else fu_cfg))   # stricter on follow-ups
+                # first listen: 8s. follow-up: the armed window (>=6s) to START speaking, from AFTER Sheru spoke.
+                wait = 8.0 if first else max(getattr(self, "_followup_window", 6.0), 6.0)
+                audio = capture_once(max_wait=wait, cfg=(None if first else fu_cfg))   # stricter on follow-ups
+                self._followup_armed = False              # consume; handle_text re-arms if this reply invites one
                 if audio is None:
                     if first and self.panel is not None:
                         self.panel._set_out("(didn't catch anything — speak a bit louder/closer)")
@@ -440,8 +443,10 @@ class Sheru:
                 while (self.claude.busy or self.speaker.speaking or self._search_busy) and time.monotonic() < t_end:
                     time.sleep(0.1)                        # …then wait that out too
                 time.sleep(0.35)                           # echo guard: let the audio tail clear the mic buffer
-                # re-listen only when a follow-up is expected: a draft awaiting confirm, or Sheru just answered
-                if self.pending is None and time.monotonic() >= self.followup_until:
+                # re-listen only when a follow-up is expected: a draft awaiting confirm, or a reply that armed one.
+                # Uses the flag (armed by THIS turn's reply), so the window is measured from now — AFTER speaking —
+                # not decayed by however long the reply took to say.
+                if self.pending is None and not getattr(self, "_followup_armed", False):
                     break
                 first = False
         finally:
@@ -690,7 +695,12 @@ class Sheru:
         threading.Thread(target=_go, name="sheru-search", daemon=True).start()
 
     def allow_followup(self, seconds: float = 6.0) -> None:
-        self.followup_until = time.monotonic() + seconds
+        """Arm a follow-up: after Sheru finishes SPEAKING, keep the mic open ~`seconds` (min 6) for the user to
+        start a reply. Armed as a flag, NOT a deadline set now — so the window can't be eaten by the time it
+        takes to speak a long reply (the bug that made continued conversation 'not work')."""
+        self._followup_armed = True
+        self._followup_window = max(float(seconds), 6.0)
+        self.followup_until = time.monotonic() + seconds     # kept for any legacy readers
 
     def _delegate(self, task: str, sink=None, user_text: str | None = None, artifact: dict | None = None) -> None:
         """Prefer Claude Code (subscription); fall back to the local model offline or on failure.
