@@ -25,6 +25,9 @@ In the **Shortcuts app** → **+** New Shortcut, name each EXACTLY:
 2. **`Sheru Focus Off`** — action **Set Focus** → **Turn Off** (turns off whatever focus is active).
 3. **`Sheru Get Focus`** — action **Get Current Focus**, then a final step that **outputs its name as text**
    (Sheru speaks it). If none is on, it returns nothing and Sheru says "not in any focus".
+4. **`Sheru Set Brightness`** — action **Set Brightness** → set the level to **Shortcut Input** (Sheru passes a
+   number 0–100). Powers "maximize the screen brightness", "set brightness to 50", "dim the screen". (Brightness
+   has no clean CLI/AppleScript path, so this Shortcut is the way.)
 Also enable **Settings → Shortcuts → Advanced → Allow Running Scripts** (needed for any helper that uses Run
 Shell Script, e.g. a future "Wake Sheru"). Keep every helper **alert-free and input-prompt-free** — a prompt hangs
 `shortcuts run`.

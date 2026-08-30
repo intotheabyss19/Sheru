@@ -126,6 +126,9 @@ class Router:
         (re.compile(r"^(?:turn off|disable|stop|end|clear|switch off)\s+(?:do not disturb|dnd|(?:my\s+)?focus|focus mode)$"), "focus_off"),
         (re.compile(r"^set\s+(?:my\s+)?focus\s+to\s+(.+)$|^(?:turn on|enable|switch to|activate|go into)\s+(?:my\s+)?(.+?)\s+focus(?:\s+mode)?$"), "focus_set"),
         (re.compile(r"^(?:what'?s|whats)\s+my\s+(?:current\s+)?focus\??$|^(?:which|what)\s+focus\s+am\s+i\s+in\??$|^am\s+i\s+in\s+(?:a\s+)?focus\??$"), "focus_get"),
+        (re.compile(r"^(?:set\s+)?(?:the\s+)?(?:screen\s+)?brightness\s+(?:to\s+)?(\d{1,3})(?:\s*percent)?$"), "brightness_set"),
+        (re.compile(r"^(?:maximi[sz]e|max|full|full ?screen)\s+(?:the\s+)?(?:screen\s+)?brightness$|^(?:set\s+)?(?:the\s+)?(?:screen\s+)?brightness\s+(?:to\s+)?(?:full|max(?:imum)?|hundred|100)$|^(?:make\s+)?(?:the\s+)?screen\s+brightest$"), "brightness_max"),
+        (re.compile(r"^(?:dim|lower|minimi[sz]e|reduce)\s+(?:the\s+)?(?:screen\s+)?brightness$|^dim\s+(?:the\s+)?screen$"), "brightness_min"),
         (re.compile(r"^(?:open|launch|start|run)\s+(?:the\s+)?(?!(?:a\s+|an\s+|my\s+)?(?:timer|alarm|stopwatch|reminder|countdown)\b)(?:a\s+|an\s+|my\s+)?(.+?)(?:\s+(?:app|application|browser))?$"), "open"),
         (re.compile(r"^(?:quit|close|kill)\s+(?!all (?:my|the|your) )(?:the\s+)?(.+?)(?:\s+(?:app|application))?$"), "quit"),
         (re.compile(r"^(?:switch|go|jump)\s+to\s+(?:the\s+)?(.+?)\s+profile$"), "profile"),
@@ -140,7 +143,7 @@ class Router:
         (re.compile(r"^(?:search|look up|google|find)\s+(?:for\s+)?(.+?)\s+(?:and|then)\s+summari[sz]e.*$"), "search_summarize"),
         (re.compile(r"^summari[sz]e(?:\s+(?:me|it|that|this|them|the results|the search|those))?(?:\s+(.+))?$"), "summarize"),
         # 'how to X' / 'how do I X' -> a YouTube tutorial (NOT play_song; 'how to play raag yaman' isn't a track)
-        (re.compile(r"^how\s+(?:do i|to|can i|do you|does one|should i)\s+(.+?)(?:\s+on\s+you\s?tube)?[?.]*$"), "howto"),
+        (re.compile(r"^how\s+(?:do i|to|can i|does one|should i)\s+(.+?)(?:\s+on\s+you\s?tube)?[?.]*$"), "howto"),
         # teach / play a Spotify PLAYLIST (before play_song, which would treat 'X playlist' as a track)
         (re.compile(r"^(?:remember\s+)?(?:that\s+)?(?:my\s+)?(.+?)\s+playlist\s+is\s+(https?://\S+|spotify:\S+)$"), "remember_playlist"),
         (re.compile(r"^remember\s+(?:my\s+|the\s+)?(.+?)\s+playlist\s+(https?://\S+|spotify:\S+)$"), "remember_playlist"),
@@ -214,13 +217,14 @@ class Router:
                 return res
         return self._tier1(t)
 
-    def _sc_focus(self, shortcut: str, text: str | None, ok_msg: str | None, is_query: bool = False) -> Result:
-        """Run a Focus helper Shortcut (Set/Get Current Focus); degrade gracefully if it isn't created yet."""
+    def _run_helper(self, shortcut: str, text: str | None, ok_msg: str | None, is_query: bool = False) -> Result:
+        """Run a Sheru helper Shortcut (Focus, brightness, …) with its input; degrade gracefully if the user
+        hasn't created it yet (I can't make shortcuts from the CLI). tool='focus' keeps it out of rating prompts."""
         from .actions import shortcuts as _sc
         out = _sc.run_shortcut(shortcut, text=text)
         if out is None:
-            return Result(f"I need a '{shortcut}' shortcut for that — create it in the Shortcuts app "
-                          "(a Set Focus / Get Current Focus action), then ask me again.", tool="focus")
+            return Result(f"I need a '{shortcut}' shortcut for that — create it in the Shortcuts app, "
+                          "then ask me again.", tool="focus")
         if is_query:
             return Result(out or "You're not in any focus right now.", tool="focus")
         return Result((ok_msg or "Done.") + (f" {out}" if out else ""), tool="focus")
@@ -372,14 +376,21 @@ class Router:
                 return Result(f"I couldn't run the {resolved} shortcut.", tool="run_shortcut")
             return Result((f"Done. {out}" if out else f"Ran {resolved}."), tool="run_shortcut")
         if kind == "dnd_on":
-            return self._sc_focus("Sheru Set Focus", "Do Not Disturb", "Do Not Disturb on.")
+            return self._run_helper("Sheru Set Focus", "Do Not Disturb", "Do Not Disturb on.")
         if kind == "focus_off":
-            return self._sc_focus("Sheru Focus Off", None, "Focus off.")
+            return self._run_helper("Sheru Focus Off", None, "Focus off.")
         if kind == "focus_set":
             mode = next((x for x in g if x), "").strip().title()
-            return self._sc_focus("Sheru Set Focus", mode, f"{mode} focus on.")
+            return self._run_helper("Sheru Set Focus", mode, f"{mode} focus on.")
         if kind == "focus_get":
-            return self._sc_focus("Sheru Get Focus", None, None, is_query=True)
+            return self._run_helper("Sheru Get Focus", None, None, is_query=True)
+        if kind == "brightness_set":
+            pct = next((x for x in g if x), "").strip()
+            return self._run_helper("Sheru Set Brightness", pct, f"Brightness set to {pct} percent.")
+        if kind == "brightness_max":
+            return self._run_helper("Sheru Set Brightness", "100", "Brightness maxed.")
+        if kind == "brightness_min":
+            return self._run_helper("Sheru Set Brightness", "20", "Screen dimmed.")
         if kind == "media":
             cmd = {"resume": "play", "skip": "next", "back": "previous"}.get(g[0], g[0])
             return Result(system.media(cmd))

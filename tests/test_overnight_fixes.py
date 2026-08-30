@@ -150,6 +150,14 @@ check("'turn on work focus' -> focus", r.route("turn on work focus").tool == "fo
 check("'whats my focus' -> focus", r.route("whats my focus").tool == "focus")
 check("no shortcut yet -> asks to create one", "shortcut" in (r.route("turn on do not disturb").speech or "").lower())
 
+print("real-usage fixes — howto misroute + brightness:")
+check("'how do you feel about me' is NOT a howto tutorial", r.route("how do you feel about me").tool != "howto")
+check("'how to play flute' is still a howto", r.route("how to play flute").tool == "howto")
+check("'how do i reset my password' is still a howto", r.route("how do i reset my password").tool == "howto")
+check("'maximize the screen brightness' -> brightness helper (was 'I can't')", r.route("maximize the screen brightness").tool == "focus")
+check("'set brightness to 50' -> brightness helper", r.route("set brightness to 50").tool == "focus")
+check("'dim the screen' -> brightness helper", r.route("dim the screen").tool == "focus")
+
 print("typing/dictation mode — routing + disable-phrase detection:")
 import re as _re
 _t1 = r.route("open Gaurav's chat and activate typing mode")
