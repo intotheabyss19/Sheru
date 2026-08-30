@@ -153,8 +153,25 @@ class TypePanel(NSObject):
         vev.setAutoresizingMask_(NSViewWidthSizable | NSViewHeightSizable)
         p.setContentView_(vev)
 
+        # history button — top-left, opens the past-conversations browser (mirrors the mic top-right)
+        hist = NSButton.alloc().initWithFrame_(NSMakeRect(PAD, H - PAD - INPUT_H + 4, 34, INPUT_H - 8))
+        hist.setBordered_(False)
+        hist.setTitle_("")
+        hist.setImagePosition_(2)
+        himg = self._symbol("clock.arrow.circlepath", 19)
+        if himg is not None:
+            hist.setImage_(himg)
+        else:
+            hist.setImagePosition_(0); hist.setTitle_("🕘"); hist.setFont_(NSFont.systemFontOfSize_(19))
+        hist.setContentTintColor_(NSColor.secondaryLabelColor())
+        hist.setTarget_(self); hist.setAction_("historyPressed:")
+        hist.setToolTip_("Past conversations")
+        hist.setAutoresizingMask_(NSViewMinYMargin)
+        vev.addSubview_(hist)
+        self._histbtn = hist
+
         # input field — borderless, transparent, large (Spotlight-like)
-        field = NSTextField.alloc().initWithFrame_(NSMakeRect(PAD, H - PAD - INPUT_H, W - 2 * PAD - 52, INPUT_H))
+        field = NSTextField.alloc().initWithFrame_(NSMakeRect(PAD + 42, H - PAD - INPUT_H, W - 2 * PAD - 52 - 42, INPUT_H))
         field.setFont_(NSFont.systemFontOfSize_(25))
         field.setPlaceholderString_("Type to Sheru…")
         field.setBordered_(False)
@@ -602,12 +619,19 @@ class TypePanel(NSObject):
 
     # ---- history browser ------------------------------------------------------------
     @objc.python_method
-    def show_history(self, list_provider, on_open, on_toggle_star):
-        """Open the panel showing a searchable list of past conversations. `list_provider(query)` returns
-        session dicts {id,label,title,starred,n}; on_open(id) loads one; on_toggle_star(id) stars it."""
+    def set_history_source(self, list_provider, on_open, on_toggle_star):
+        """Wire the history providers once (at panel creation) so BOTH the in-panel clock button and the
+        menu-bar item can open the browser. list_provider(query)->[session dicts]; on_open(id) loads one;
+        on_toggle_star(id) stars it."""
         self._hist_provider = list_provider
         self._hist_open = on_open
         self._hist_star = on_toggle_star
+
+    @objc.python_method
+    def show_history(self, list_provider=None, on_open=None, on_toggle_star=None):
+        """Open the panel showing a searchable list of past conversations (menu-bar entry point)."""
+        if list_provider is not None:
+            self.set_history_source(list_provider, on_open, on_toggle_star)
 
         def do():
             if self._panel is None:
@@ -620,6 +644,16 @@ class TypePanel(NSObject):
             self._install_click_monitor()
             self._open_history()
         AppHelper.callAfter(do)
+
+    def historyPressed_(self, sender):
+        """The in-panel clock button — toggle the history browser using the wired providers."""
+        if self._hist is not None:
+            self._close_history()
+            return
+        if self._hist_provider is None:
+            self.set_status("History unavailable")
+            return
+        self._open_history()
 
     @objc.python_method
     def _open_history(self):

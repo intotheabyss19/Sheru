@@ -434,6 +434,8 @@ class Sheru:
                 lambda text, sink: self.handle_text(text, sink=sink),
                 lambda: self.activate())
             self.panel.set_history_provider(self.recent_interactions)
+            from . import conversations as _C
+            self.panel.set_history_source(lambda q: _C.list_sessions(query=q), _C.session_turns, _C.toggle_star)
 
     def show_type_panel(self) -> None:
         """Show the 'Type to Sheru' box (silent text input). Requires the NSApplication run loop."""
