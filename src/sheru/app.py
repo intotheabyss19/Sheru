@@ -1070,12 +1070,14 @@ def run_menubar(app: Sheru) -> None:
             # Yash's preferred menu-bar mark: the waveform template PNG (black silhouette + alpha -> renders crisp,
             # auto-inverts for light/dark). Set as the ICON so it's ALWAYS visible; the title is left free for the
             # alarm badge. Earlier "missing icon" was really the _refresh_alarms bug that set title=None with no icon.
-            _icon = str(config.ROOT / "assets" / "menubar.png")
-            self._has_icon = os.path.exists(_icon)
-            if self._has_icon:
-                super().__init__("Sheru", icon=_icon, template=True, quit_button=None)
-            else:
-                super().__init__("Sheru", title="🦁", quit_button=None)
+            # Menu-bar mark = a white, shape-only SF Symbol (config.MENUBAR_ICON), rendered as a TEMPLATE image on
+            # the status-item button — the native Mac look (auto white-on-dark / black-on-light). Applied in the
+            # first _refresh_alarms tick because the status item only exists once the run loop starts; the 🦁 title
+            # here just fills the gap for that first ~2s. The button image must be set via the modern button API —
+            # rumps' own icon= uses a pre-10.10 call Tahoe ignores.
+            super().__init__("Sheru", title="🦁", quit_button=None)
+            self._icon_symbol = config.MENUBAR_ICON
+            self._cur_sym = None                   # currently-applied symbol (change-detection)
             self._alarm_item = rumps.MenuItem("⏰ Alarms: none", callback=lambda _: app.show_alarms())
             self._stop_item = rumps.MenuItem("🔔 Stop ringing", callback=lambda _: alarms.stop_ring())
             # fixed 2-voice toggle (Sarvam cloud / local Kokoro) — a GUI option, not a voice command
@@ -1144,15 +1146,35 @@ def run_menubar(app: Sheru) -> None:
         def _tick(self, _):
             self._refresh_alarms()
 
+        def _apply_symbol(self, name: str):
+            """Set the status-item button to a white, theme-adapting SF Symbol (template image, modern button API)."""
+            try:
+                from AppKit import NSImage, NSImageSymbolConfiguration
+                btn = self._nsapp.nsstatusitem.button()
+                if btn is None:
+                    return
+                si = NSImage.imageWithSystemSymbolName_accessibilityDescription_(name, "Sheru")
+                if si is None:                       # unknown symbol -> keep the 🦁 title so we're never blank
+                    self.title = "🦁"
+                    return
+                cfg = NSImageSymbolConfiguration.configurationWithPointSize_weight_scale_(16, 5, 2)  # menu-bar sized
+                si = si.imageWithSymbolConfiguration_(cfg)
+                si.setTemplate_(True)                # template => white on dark bar / black on light, like native icons
+                self.title = ""                      # the glyph carries identity; no text next to it
+                btn.setImage_(si)
+            except Exception:
+                pass
+
         def _refresh_alarms(self):
-            # render the soonest alarm as the menu-bar title + item (the old code set title=None, erasing it)
             try:
                 from . import alarms
                 act = alarms.active()
                 ringing = alarms.is_ringing()
-                # title is just the alarm badge; the waveform ICON stays visible under it. Only fall back to a
-                # 🦁 title (never None) when there's no icon, else the menu-bar item would vanish.
-                self.title = "🔔" if ringing else ("⏰" if act else (None if self._has_icon else "🦁"))
+                # The glyph is the mark; swap to a bell while an alarm rings. Apply only on change.
+                want_sym = "bell.fill" if ringing else self._icon_symbol
+                if want_sym != self._cur_sym:
+                    self._cur_sym = want_sym
+                    self._apply_symbol(want_sym)
                 if ringing:
                     self._alarm_item.title = "🔔 Alarm ringing — press Stop below"
                 elif act:
@@ -1260,6 +1282,18 @@ def run_menubar(app: Sheru) -> None:
         # show onboarding shortly after the run loop starts
         def _first_run(timer): app.show_onboarding()
         NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(0.8, _OnceTarget.alloc().initWithFn_(_first_run), "fire:", None, False)
+    # Hide the dock icon at RUNTIME, after the status item is laid out. Doing this via Info.plist LSUIElement (or
+    # setting the policy before the run loop) makes the app an accessory from launch, which on Tahoe collapses the
+    # status item to zero height (invisible). Setting Accessory a beat after launch keeps the menu-bar item.
+    from Foundation import NSTimer as _NST
+    def _hide_dock(timer):
+        try:
+            from AppKit import NSApplication
+            NSApplication.sharedApplication().setActivationPolicy_(1)   # NSApplicationActivationPolicyAccessory
+        except Exception:
+            pass
+    _NST.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
+        0.4, _OnceTarget.alloc().initWithFn_(_hide_dock), "fire:", None, False)
     sheru_app.run()
 
 

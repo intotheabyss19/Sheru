@@ -59,6 +59,10 @@ MIC_DEVICE = os.environ.get("SHERU_MIC") or _P.get("mic_device") or None
 # Listening animation shown on activation: "orb" (glowing orb, lightest) or "particles" (particle swirl).
 ORB_STYLE = os.environ.get("SHERU_ORB") or _P.get("orb_style") or "orb"
 
+# Menu-bar mark: an SF Symbol name (rendered as a white, theme-adapting template glyph like the native Mac icons).
+# Set profile 'menubar_icon' or SHERU_MENUBAR_ICON. e.g. waveform, mic, mic.fill, pawprint.fill, sparkles.
+MENUBAR_ICON = os.environ.get("SHERU_MENUBAR_ICON") or _P.get("menubar_icon") or "waveform"
+
 
 def _claude_config_dir() -> str | None:
     """Which Claude login Tier-2 (`claude -p`) uses. The GUI/login-item launch inherits an EMPTY
