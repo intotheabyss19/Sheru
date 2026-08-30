@@ -848,8 +848,18 @@ class Sheru:
             while True:
                 try:
                     conn, _ = srv.accept()
+                    try:
+                        conn.settimeout(0.3)
+                        msg = conn.recv(16)             # 'chat' -> panel, 'ping' -> single-instance probe, else voice
+                    except Exception:
+                        msg = b""
                     conn.close()
-                    AppHelper.callAfter(self.activate)
+                    if msg == b"ping":
+                        continue                        # just checking we're alive; don't activate anything
+                    if msg == b"chat":
+                        AppHelper.callAfter(self.show_type_panel)
+                    else:
+                        AppHelper.callAfter(self.activate)
                 except OSError:
                     break
         threading.Thread(target=_loop, name="sheru-trigger", daemon=True).start()
@@ -1137,6 +1147,7 @@ def run_menubar(app: Sheru) -> None:
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="sheru")
     p.add_argument("command", nargs="?", help="'setup' (first-run wizard) or 'trigger' (activate a running Sheru)")
+    p.add_argument("arg", nargs="?", help="for 'trigger': 'chat' opens the type panel; default is voice")
     p.add_argument("--text", help="run one command from text (no mic) and exit")
     p.add_argument("--listen", action="store_true", help="voice loop in the terminal, no menubar")
     p.add_argument("--no-llm", action="store_true", help="skip the local LLM (Tier 0 + Claude only)")
@@ -1157,7 +1168,9 @@ def main(argv=None) -> int:
         from . import config
         try:
             c = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            c.connect(str(config.DATA_DIR / "sheru.sock")); c.close()
+            c.connect(str(config.DATA_DIR / "sheru.sock"))
+            c.sendall(b"chat" if a.arg == "chat" else b"voice")   # tap -> voice, hold -> chat panel
+            c.close()
             return 0
         except OSError:
             print("Sheru isn't running."); return 1
@@ -1168,8 +1181,8 @@ def main(argv=None) -> int:
         from . import config as _cfg
         try:
             _c = _sk.socket(_sk.AF_UNIX, _sk.SOCK_STREAM)
-            _c.connect(str(_cfg.DATA_DIR / "sheru.sock")); _c.close()
-            print("Sheru is already running — activated it. (Quit it from the menu bar first to fully restart.)")
+            _c.connect(str(_cfg.DATA_DIR / "sheru.sock")); _c.sendall(b"ping"); _c.close()   # probe, don't activate
+            print("Sheru is already running. (Quit it from the menu bar first to fully restart.)")
             return 0
         except OSError:
             pass                                   # nothing listening (fresh start or a stale socket) -> proceed
