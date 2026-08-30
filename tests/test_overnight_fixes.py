@@ -14,12 +14,16 @@ warnings.filterwarnings("ignore")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 # ── mock side effects BEFORE importing the router ───────────────────────────────────────────────────
-from sheru.actions import apps, music, system, files, web, browser, browser_agent
+from sheru.actions import apps, music, system, files, web, browser, browser_agent, shortcuts
 from sheru import alarms, reminders
 
 
 def _noop(*a, **k):
     return "ok"
+
+
+shortcuts.run_shortcut = lambda *a, **k: None          # no shortcut exists in tests -> graceful "create it" path
+shortcuts.list_shortcuts = lambda *a, **k: []
 
 
 for mod, fns in {
@@ -137,6 +141,14 @@ check("'run the shortcut Focus On' -> run_shortcut", r.route("run the shortcut F
 check("'run Set Focus shortcut' -> run_shortcut", r.route("run Set Focus shortcut").tool == "run_shortcut")
 check("'run a bath' is NOT run_shortcut (stays open)", r.route("run a bath").tool != "run_shortcut")
 check("'open spotify' still opens (unaffected)", r.route("open spotify").tool == "open")
+
+print("focus/DND by voice — routes to focus (via helper shortcuts), degrades gracefully:")
+check("'turn on do not disturb' -> focus", r.route("turn on do not disturb").tool == "focus")
+check("'turn off focus' -> focus", r.route("turn off focus").tool == "focus")
+check("'set focus to work' -> focus", r.route("set focus to work").tool == "focus")
+check("'turn on work focus' -> focus", r.route("turn on work focus").tool == "focus")
+check("'whats my focus' -> focus", r.route("whats my focus").tool == "focus")
+check("no shortcut yet -> asks to create one", "shortcut" in (r.route("turn on do not disturb").speech or "").lower())
 
 print("typing/dictation mode — routing + disable-phrase detection:")
 import re as _re

@@ -9,6 +9,28 @@ Source of the action inventory: `https://blakecrosley.com/guides/shortcuts` (Yas
 
 ---
 
+## ✅ SHIPPED 2026-08-31 (overnight #2) — bridge + Focus-by-voice
+Built and routing-tested (`tests/test_overnight_fixes.py`):
+- **`run_shortcut` bridge** (`src/sheru/actions/shortcuts.py` + grammar): say **"run shortcut &lt;name&gt;"** /
+  **"run the &lt;name&gt; shortcut"** → runs it (fuzzy-matched to `shortcuts list`, timeout-guarded). Unknown name →
+  it says so instead of misfiring.
+- **Focus / DND by voice** (grammar → helper shortcuts): **"turn on do not disturb"**, **"set focus to work"**,
+  **"turn on work focus"**, **"turn off focus"**, **"what's my focus"**. Until the helper shortcuts exist, Sheru
+  says exactly which one to create.
+
+### ⚙️ YOU create these once (I can't make shortcuts from the CLI) — then the voice commands above work
+In the **Shortcuts app** → **+** New Shortcut, name each EXACTLY:
+1. **`Sheru Set Focus`** — action **Set Focus** → set it to turn a focus **On**, and set the focus to
+   **Shortcut Input** (so Sheru can pass "Work" / "Do Not Disturb" / etc.). No "Ask Each Time", no alerts.
+2. **`Sheru Focus Off`** — action **Set Focus** → **Turn Off** (turns off whatever focus is active).
+3. **`Sheru Get Focus`** — action **Get Current Focus**, then a final step that **outputs its name as text**
+   (Sheru speaks it). If none is on, it returns nothing and Sheru says "not in any focus".
+Also enable **Settings → Shortcuts → Advanced → Allow Running Scripts** (needed for any helper that uses Run
+Shell Script, e.g. a future "Wake Sheru"). Keep every helper **alert-free and input-prompt-free** — a prompt hangs
+`shortcuts run`.
+
+---
+
 ## Build order (highest leverage first)
 
 ### 1. The `run_shortcut` bridge — do this FIRST (unlocks everything else)

@@ -122,6 +122,10 @@ class Router:
         (re.compile(r"^(?:define|definition of|meaning of|what'?s\s+(?:the\s+)?(?:meaning|definition)\s+of|what is the meaning of)\s+(.+?)$"), "define"),
         (re.compile(r"^what\s+does\s+(?:the\s+word\s+)?(.+?)\s+mean$"), "define"),
         (re.compile(r"^run(?:\s+the)?\s+shortcut\s+(.+)$|^run(?:\s+the)?\s+(.+?)\s+shortcut$"), "run_shortcut"),
+        (re.compile(r"^(?:turn on|enable|start|activate|switch on)\s+(?:do not disturb|dnd)$"), "dnd_on"),
+        (re.compile(r"^(?:turn off|disable|stop|end|clear|switch off)\s+(?:do not disturb|dnd|(?:my\s+)?focus|focus mode)$"), "focus_off"),
+        (re.compile(r"^set\s+(?:my\s+)?focus\s+to\s+(.+)$|^(?:turn on|enable|switch to|activate|go into)\s+(?:my\s+)?(.+?)\s+focus(?:\s+mode)?$"), "focus_set"),
+        (re.compile(r"^(?:what'?s|whats)\s+my\s+(?:current\s+)?focus\??$|^(?:which|what)\s+focus\s+am\s+i\s+in\??$|^am\s+i\s+in\s+(?:a\s+)?focus\??$"), "focus_get"),
         (re.compile(r"^(?:open|launch|start|run)\s+(?:the\s+)?(?!(?:a\s+|an\s+|my\s+)?(?:timer|alarm|stopwatch|reminder|countdown)\b)(?:a\s+|an\s+|my\s+)?(.+?)(?:\s+(?:app|application|browser))?$"), "open"),
         (re.compile(r"^(?:quit|close|kill)\s+(?!all (?:my|the|your) )(?:the\s+)?(.+?)(?:\s+(?:app|application))?$"), "quit"),
         (re.compile(r"^(?:switch|go|jump)\s+to\s+(?:the\s+)?(.+?)\s+profile$"), "profile"),
@@ -209,6 +213,17 @@ class Router:
                     res.tool = kind          # so the journal logs WHICH action fired, not None, for grammar hits
                 return res
         return self._tier1(t)
+
+    def _sc_focus(self, shortcut: str, text: str | None, ok_msg: str | None, is_query: bool = False) -> Result:
+        """Run a Focus helper Shortcut (Set/Get Current Focus); degrade gracefully if it isn't created yet."""
+        from .actions import shortcuts as _sc
+        out = _sc.run_shortcut(shortcut, text=text)
+        if out is None:
+            return Result(f"I need a '{shortcut}' shortcut for that — create it in the Shortcuts app "
+                          "(a Set Focus / Get Current Focus action), then ask me again.", tool="focus")
+        if is_query:
+            return Result(out or "You're not in any focus right now.", tool="focus")
+        return Result((ok_msg or "Done.") + (f" {out}" if out else ""), tool="focus")
 
     def _tier0(self, kind: str, m: re.Match) -> Result:
         g = m.groups()
@@ -356,6 +371,15 @@ class Router:
             if out is None:
                 return Result(f"I couldn't run the {resolved} shortcut.", tool="run_shortcut")
             return Result((f"Done. {out}" if out else f"Ran {resolved}."), tool="run_shortcut")
+        if kind == "dnd_on":
+            return self._sc_focus("Sheru Set Focus", "Do Not Disturb", "Do Not Disturb on.")
+        if kind == "focus_off":
+            return self._sc_focus("Sheru Focus Off", None, "Focus off.")
+        if kind == "focus_set":
+            mode = next((x for x in g if x), "").strip().title()
+            return self._sc_focus("Sheru Set Focus", mode, f"{mode} focus on.")
+        if kind == "focus_get":
+            return self._sc_focus("Sheru Get Focus", None, None, is_query=True)
         if kind == "media":
             cmd = {"resume": "play", "skip": "next", "back": "previous"}.get(g[0], g[0])
             return Result(system.media(cmd))
