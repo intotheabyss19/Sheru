@@ -16,7 +16,10 @@ survives reboots** (runs as a LaunchAgent — the old `.app` couldn't show an ic
   "set focus to work", "what's my focus") · **brightness** ("set brightness to 50", "dim the screen") · **window
   management** ("maximize this window", "left half", "center this window" — works now, via Rectangle).
 - **Fine-tune retry:** bigger, honest dataset + fresh LoRA on 2507 → still overfit; **kept base** (84% vs adapter ≤76%).
-- **Self-reviewed** tonight's code and fixed 5 more bugs it found.
+- **★ Reliability fixes (your #1 complaint):** two code audits found + fixed ~11 real bugs — the biggest: **a handler
+  crash used to silently kill the whole voice loop** (mic just closed → "it stopped for no reason"); now it survives
+  and says so. Also: "remind me to check the weather" / "text mom the weather looks bad" no longer misroute to a
+  weather lookup; a half-finished message draft no longer hijacks your next command; "stop it" now cancels Claude.
 
 **⚙️ Your ~2-minute setup to unlock the rest:**
 1. Menu-bar **✦ → 🔓 Grant Permissions** → enable Sheru under **Accessibility** + **Microphone** (it's a new
