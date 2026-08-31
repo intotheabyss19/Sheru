@@ -22,6 +22,10 @@ from . import config
 
 _log = logging.getLogger("sheru.stt")
 
+# On noisy / low-content audio Whisper regurgitates its own priming prompt as the "transcript"
+# ("A conversation in Hindi and Hindi.", "keep Hindi words in Devanagari"). Never a real command — drop it.
+_PROMPT_ECHO = re.compile(r"conversation in (?:hindi|english|hinglish)|keep hindi words|do not translate|यह हिंदी और अंग", re.I)
+
 
 def _hallucinated(r: dict) -> bool:
     """True if a Whisper result is a silence/noise hallucination rather than real speech — so it can be dropped
@@ -156,6 +160,9 @@ class Transcriber:
             if text.strip() and _hallucinated(r):        # drop silence/noise hallucinations before they act or loop
                 _log.info("stt dropped hallucination %r (comp_ratio=%.1f)", text.strip()[:40],
                           max((s.get("compression_ratio", 0.0) or 0.0) for s in (r.get("segments") or [{}])))
+                text = ""
+            elif text.strip() and _PROMPT_ECHO.search(text):   # Whisper echoed its own Hinglish priming prompt on noise
+                _log.info("stt dropped initial-prompt echo %r", text.strip()[:50])
                 text = ""
         else:
             import mlx.core as mx
