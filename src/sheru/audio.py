@@ -102,15 +102,20 @@ class Listener:
         # Prefer the one shared Voice-Processing engine (AEC/AGC/NS); fall back to a raw sounddevice stream.
         self._src = avcapture.shared()
         self._shared = self._src is not None
-        if not self._shared:
+        if self._shared:
+            avcapture.set_persistent(True)   # always-on listener keeps the engine (and mic) live between turns
+        else:
             self._src = _SdSource(self.cfg.device).start()
         threading.Thread(target=self._loop, name="sheru-listener", daemon=True).start()
         return self
 
     def stop(self) -> None:
         self._stop.set()
-        if not self._shared and self._src is not None:   # own sd stream — close it. The shared VP engine is
-            self._src.stop()                             # app-wide and must outlive this listener.
+        if self._shared:                                 # release the shared engine so the mic is freed
+            avcapture.set_persistent(False)
+            avcapture.release_shared()
+        elif self._src is not None:                      # own sd stream — close it
+            self._src.stop()
 
     def _loop(self) -> None:
         while not self._stop.is_set():

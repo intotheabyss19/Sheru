@@ -73,8 +73,18 @@ if avcapture.available():
         avcapture.set_ptt(True)
         check("ptt flag steers coordination", avcapture.ptt_active())
         avcapture.set_ptt(False)
-        lis.stop()
-        src.stop()
+        lis.stop()                                    # listener.stop() releases the shared engine (frees the mic)
+
+        # release_shared() frees the mic when idle (PTT-only mode) so the indicator isn't always-on
+        src2 = avcapture.shared()
+        check("shared() re-creates the engine after a release", src2 is not None)
+        avcapture.release_shared()
+        check("release_shared() frees the mic (engine cleared) when not persistent", not avcapture.vp_active())
+        # a persistent holder (the always-on listener) must keep the mic live across turns
+        avcapture.shared(); avcapture.set_persistent(True)
+        avcapture.release_shared()
+        check("release_shared() is a NO-OP while a persistent holder needs the mic", avcapture.vp_active())
+        avcapture.set_persistent(False); avcapture.release_shared()
 else:
     print("  – Voice-Processing unavailable here; skipped the real-mic checks (raw sounddevice fallback active)")
 

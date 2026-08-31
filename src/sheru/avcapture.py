@@ -81,6 +81,31 @@ def ptt_active() -> bool:
     return _ptt.is_set()
 
 
+_persistent = False   # True only when the always-on wake-word listener needs the engine kept live between turns
+
+
+def set_persistent(on: bool) -> None:
+    """The always-on listener calls this to keep the shared engine alive across push-to-talk turns. In the default
+    push-to-talk-only mode it stays False, so release_shared() actually frees the mic when a conversation ends."""
+    global _persistent
+    _persistent = on
+
+
+def release_shared() -> None:
+    """Stop the shared Voice-Processing engine and FREE THE MIC (the macOS mic-in-use indicator goes off) when
+    nothing needs it — call this when a push-to-talk conversation ends. No-op while the always-on listener holds
+    the engine (in that mode the mic is legitimately always live). A later shared() call re-creates it, so the
+    mic is live only during an actual conversation, not for the whole app lifetime."""
+    global _shared
+    if _persistent:
+        return
+    with _shared_lock:
+        s, _shared = _shared, None
+    if s is not None:
+        s.stop()
+        _log.info("mic: released Voice-Processing engine — mic idle")
+
+
 def _resample(x: np.ndarray, sr: int) -> np.ndarray:
     """Resample mono float32 to 16 kHz. VP I/O usually already delivers 16 kHz (no-op); resample only if not."""
     if sr == _TARGET_SR or x.size == 0:

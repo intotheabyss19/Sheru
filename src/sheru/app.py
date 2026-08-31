@@ -631,6 +631,8 @@ class Sheru:
                 first = False
         finally:
             self._listening = False
+            from . import avcapture
+            avcapture.release_shared()                       # free the mic (indicator off) — the conversation is over
             self._stop_orb_driver()                         # hide the orb + stop its timer when listening ends
             if self.panel is not None:                      # never leave a stale "listening…" showing
                 self.panel.set_status("")
