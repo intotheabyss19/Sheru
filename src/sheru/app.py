@@ -169,14 +169,18 @@ class Sheru:
         asks_back = bool(res.speech) and res.speech.rstrip().endswith("?")   # a question needs time for a reply
         keep_open = bool(res.speech) and tool != "end_convo"
         if self._is_voice_sink(sink) and (res.followup or asks_back or keep_open):
-            self.allow_followup(25 if (res.followup or asks_back) else 18)
+            self.allow_followup(25 if (res.followup or asks_back) else 20)   # keep listening >=20s (Yash's ask)
             log.info("mic RE-ARMED after tool=%s (continued conversation)", tool)
         self._record_turn(text, res.speech)
         return res.speech
 
     def _is_voice_sink(self, sink) -> bool:
-        """True when the reply is spoken (push-to-talk or wake-word), not typed into the panel."""
-        return sink is self.speaker.speak or sink is self._say_both
+        """True when the reply is spoken (push-to-talk or wake-word), not typed into the panel.
+        Compare the underlying FUNCTION, not the bound method: `sink is self._say_both` is ALWAYS False because
+        each `self._say_both` access creates a new bound-method object. That silently disabled EVERY follow-up arm
+        gated on this — the real, long-standing 'continued conversation doesn't work' bug."""
+        f = getattr(sink, "__func__", None)
+        return f is self._say_both.__func__ or f is self.speaker.speak.__func__
 
     def _record_turn(self, user: str, assistant: str | None) -> None:
         """Append this exchange to the shared conversation history (ALL tiers, not just the local LLM), capped, so
@@ -566,7 +570,7 @@ class Sheru:
                         _t0 = time.monotonic()
                         while self.speaker.speaking and time.monotonic() - _t0 < 8:
                             time.sleep(0.1)
-                        self._followup_window = 14.0
+                        self._followup_window = 20.0      # >=20s to answer (Yash's ask)
                         continue                          # re-open the mic for the answer
                     log.info("ptt: quiet after 'Anything else?' — ending the conversation")
                     break

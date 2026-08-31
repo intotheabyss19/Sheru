@@ -26,6 +26,7 @@ shortcuts.run_shortcut = lambda *a, **k: None          # no shortcut exists in t
 shortcuts.list_shortcuts = lambda *a, **k: []
 from sheru.actions import screen
 screen.read_screen = lambda *a, **k: "Inbox · 3 unread · Reply"   # don't screenshot during tests
+web.site_search = lambda q, sites: f"Searching {' and '.join(s.title() for s in sites)} for {q}."   # don't open browsers
 
 
 for mod, fns in {
@@ -166,6 +167,18 @@ check("'text mom the weather looks bad' -> message (not weather)", r.route("text
 check("'message dad who won the game' -> message (not current)", r.route("message dad who won the game").tool == "message")
 check("'whats the weather' still -> weather", r.route("whats the weather").tool == "weather")
 check("'what is the news today' still -> current", r.route("what is the news today").tool == "current")
+
+print("site search + calc-then-convert:")
+check("'search iphone 17 on amazon' -> site_search", r.route("search iphone 17 on amazon").tool == "site_search")
+check("'search x on amazon and flipkart' -> site_search", r.route("search iphone 17 on amazon and flipkart").tool == "site_search")
+check("'search cats on google' -> generic search (not site_search)", r.route("search cats on google").tool == "search")
+_c = r.route("whats 30.45 plus 453.12 plus 2.34")
+check("calc remembers the result", r._last_calc is not None and abs(r._last_calc - 485.91) < 0.01)
+import sheru.actions.structured as _st          # mock fx locally (no network) just for the convert routing check
+_orig_fx = _st.fx; _st.fx = lambda q: f"convert:{q}"
+check("'convert that number from usd to inr' -> uses the last result", "485.91" in (r.route("convert that number from usd to inr").speech or ""))
+check("'convert that to rupees' (default USD)", "485.91" in (r.route("convert that to rupees").speech or ""))
+_st.fx = _orig_fx
 
 print("read screen (Vision OCR) — routing:")
 check("'what's on my screen' -> read_screen", r.route("what's on my screen").tool == "read_screen")

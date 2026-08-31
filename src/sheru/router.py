@@ -144,6 +144,7 @@ class Router:
         (re.compile(r"^(?!play\b)(?!.*\bby\b)(?!(?:message|text|msg|whats\s?app|send|remind me)\b).*\b(news|headlines?|stocks?|stock price|share price|bitcoin|crypto|ethereum|nasdaq|dow jones|who won|score of|election results?|prime minister|president of|forecast|is it (?:going to )?rain(?:ing)?|will it rain|need an umbrella|temperature (?:outside|right now)|what'?s happening|going on (?:in the world|with the)|current (?:price|events)|population of|gdp of|net worth of|market cap of|how many people (?:live|are) )\b.*"), "current"),
         # currency conversion / exchange rate -> local search+summarize (was escalating to Claude)
         (re.compile(r"^(?!(?:message|text|msg|whats\s?app|send|remind me)\b)(?:.*\b(?:exchange rate|conversion rate)\b.*|.*\b\d+(?:\.\d+)?\s*(?:euros?|dollars?|pounds?|yen|rupees?|usd|eur|gbp|inr|jpy)\b.*\b(?:in|to|into)\b\s*(?:inr|usd|eur|gbp|jpy|rupees?|dollars?|euros?|pounds?|yen)\b.*)"), "current"),
+        (re.compile(r"^(?:convert|change)\s+(?:that|it|this|the\s+(?:number|amount|result|answer|total|sum))(?:\s+number)?\s+(?:from\s+(.+?)\s+)?(?:in\s?to|to|in)\s+(.+?)$"), "convert_last"),
         (re.compile(r"^(?:search|look up|google|find)\s+(?:for\s+)?(.+?)\s+(?:and|then)\s+summari[sz]e.*$"), "search_summarize"),
         (re.compile(r"^summari[sz]e(?:\s+(?:me|it|that|this|them|the results|the search|those))?(?:\s+(.+))?$"), "summarize"),
         # 'how to X' / 'how do I X' -> a YouTube tutorial (NOT play_song; 'how to play raag yaman' isn't a track)
@@ -157,6 +158,7 @@ class Router:
         (re.compile(r"^(?:crank|pump)\s+(?:it|the volume|music)?\s*up$"), "vol_up"),
         (re.compile(r"^skip(?:\s+(?:this|it|song|track|forward))?(?:\s+one)?$"), "skip"),
         (re.compile(r"^(?:pull up|bring up)\s+(?:https?://)?((?:[\w-]+\.)+[a-z]{2,}(?:/\S*)?)$"), "url"),
+        (re.compile(r"^(?:search(?:\s+for)?|find|show me|open|look\s+for)\s+(.+?)\s+on\s+((?:amazon|flipkart|myntra|ebay|snapdeal)(?:\.[a-z.]+)?(?:\s*(?:and|&|,|\+)\s*(?:amazon|flipkart|myntra|ebay|snapdeal)(?:\.[a-z.]+)?)*)$"), "site_search"),
         (re.compile(r"^(?:search|google|look up|look for|find)\s+(?:for\s+)?(.+?)(?:\s+on\s+(google|duck ?duck ?go|bing))?$"), "search"),
         (re.compile(r"^(?:set\s+)?(?:the\s+)?volume\s+(?:to\s+)?(\d{1,3})(?:\s*percent)?$"), "volume"),
         (re.compile(r"^(increase|raise|bump|boost|decrease|reduce|lower|drop|turn up|turn down)\s+(?:the\s+)?(?:volume|sound|audio)\s+(?:up\s+|down\s+|further\s+)?(?:by\s+)?(\d{1,3})(?:\s*percent)?$"), "volume_by"),
@@ -346,6 +348,19 @@ class Router:
             return Result(web.set_search_engine(g[0]))
         if kind == "images":
             return Result(web.image_search(g[0]))
+        if kind == "site_search":
+            q = g[0].strip()
+            sites = re.findall(r"amazon|flipkart|myntra|ebay|snapdeal", (g[1] or "").lower())
+            return Result(web.site_search(q, sites), tool="site_search", followup=True)
+        if kind == "convert_last":
+            if getattr(self, "_last_calc", None) is None:
+                return Result("I don't have a recent number to convert. Do the calculation first.", followup=True)
+            frm = (g[0] or "usd").strip()
+            to = (g[1] or "inr").strip()
+            amt = round(float(self._last_calc), 2)
+            from .actions import structured
+            ans = structured.fx(f"convert {amt} {frm} to {to}")
+            return Result(ans or f"I couldn't convert {self._last_calc} to {to}.", tool="current", followup=True)
         if kind == "search":
             q = g[0].strip()
             eng = g[1].replace(" ", "") if len(g) > 1 and g[1] else None
