@@ -441,11 +441,11 @@ class Router:
             return Result(system.window("center", "Centered."), tool="window")
         if kind == "read_screen":
             from .actions import screen
-            txt = screen.read_screen()
+            txt = screen.understand_screen()   # local huihui Qwen3-VL if available, else OCR
             if not txt:
                 return Result("I couldn't read the screen — grant Sheru Screen Recording in System Settings → "
                               "Privacy & Security if this keeps happening.", tool="read_screen", followup=True)
-            return Result(f"Here's what I can see: {txt}", tool="read_screen", followup=True)
+            return Result(f"Here's what's on your screen: {txt}", tool="read_screen", followup=True)
         if kind == "media":
             cmd = {"resume": "play", "skip": "next", "back": "previous"}.get(g[0], g[0])
             return Result(system.media(cmd))

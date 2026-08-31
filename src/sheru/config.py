@@ -65,6 +65,12 @@ WAKE_WORDS = ("hey sheru", "sheru")
 LOCAL_LLM = os.environ.get("SHERU_LLM") or _P.get("llm_model") or "mlx-community/Qwen3-4B-Instruct-2507-4bit"   # resident tier. Instruct-2507 4B beats base 4B on tool-routing (84% vs 79% on our eval) at the SAME ~2.5GB/speed; 8B only warmer chit-chat at 2x RAM (freezes on 16GB). Override via profile 'llm_model' / SHERU_LLM.
 LOCAL_LLM_FAST = os.environ.get("SHERU_LLM_FAST") or None                       # optional light tier; set to e.g. mlx-community/Qwen3-4B-4bit
 LOCAL_ADAPTER = os.environ.get("SHERU_ADAPTER") or _P.get("llm_adapter") or None  # optional LoRA adapter dir served on top of LOCAL_LLM (no fuse); set by fine-tuning once it beats base
+
+# Screen understanding via the local huihui Qwen3-VL-4B-abliterated (MLX). mlx-vlm's deps conflict with Sheru's,
+# so it runs in a DURABLE isolated venv (data/vlm-venv) that Sheru shells out to. "off" disables it (OCR only).
+VLM_PYTHON = os.environ.get("SHERU_VLM_PYTHON") or str(ROOT / "data" / "vlm-venv" / "bin" / "python")
+VLM_MODEL = os.environ.get("SHERU_VLM_MODEL") or _P.get("vlm_model") or "EZCon/Huihui-Qwen3-VL-4B-Instruct-abliterated-4bit-g32-mxfp4-mixed_4_8-mlx"
+VLM_ENABLED = (os.environ.get("SHERU_VISION") or _P.get("vision") or "auto") != "off"
 # STT backend: "parakeet" (fast, English/European only), "whisper" (Hindi + English + Hinglish, slower, local),
 # or "sarvam" (Saaras v3 in the cloud — best Hindi/Hinglish by a wide margin, needs network + an API key).
 # Real Hindi NEEDS whisper or sarvam — parakeet mangles it into garbage.

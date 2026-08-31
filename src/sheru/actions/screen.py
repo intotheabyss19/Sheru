@@ -26,3 +26,17 @@ def read_screen(max_chars: int = 500) -> str:
         tmp.unlink(missing_ok=True)
     text = " · ".join(l.strip() for l in lines if l.strip())
     return text[:max_chars]
+
+
+def understand_screen(question: str | None = None, max_chars: int = 600) -> str:
+    """Natural-language screen understanding via the local huihui Qwen3-VL (much richer than raw OCR — it
+    describes the app, layout, and buttons). Falls back to OCR text if the VLM isn't available or errors."""
+    try:
+        from .. import vision
+        if vision.available():
+            ans = vision.describe_screen(question)
+            if ans:
+                return ans[:max_chars]
+    except Exception:
+        pass
+    return read_screen(max_chars=max_chars)   # OCR fallback
