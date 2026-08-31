@@ -3,12 +3,13 @@
 <plist version="1.0">
 <dict>
   <key>Label</key><string>com.sheru.assistant</string>
-  <!-- Run the venv entrypoint directly (NOT the .app shim). A LaunchAgent runs in the Aqua GUI session, so the
-       menu-bar status item lays out correctly — unlike the .app, which exec's a binary outside its bundle and is
-       treated as a faceless process (status item collapses to zero height / invisible). -->
+  <!-- Run the PROPER py2app bundle executable (built by packaging/setup_app.py). Because the executable lives
+       INSIDE Sheru.app, macOS identifies the process as "Sheru" with the app icon — in permission prompts, the
+       mic-in-use indicator, and Activity Monitor — not "python3.12". A LaunchAgent runs it in the Aqua GUI
+       session so the menu-bar item lays out; the app demotes itself to Accessory at runtime (no dock icon). -->
   <key>ProgramArguments</key>
   <array>
-    <string>/Users/yash/Projects/Sheru/.venv/bin/sheru</string>
+    <string>/Applications/Sheru.app/Contents/MacOS/Sheru</string>
   </array>
   <key>RunAtLoad</key><true/>
   <!-- Restart if Sheru CRASHES (non-zero exit), but honour a clean Quit from the menu bar (exit 0). -->
