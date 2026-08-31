@@ -1504,6 +1504,17 @@ def main(argv=None) -> int:
             return 0
         except OSError:
             return _launch_sheru()   # Sheru is off -> LAUNCH it (don't activate); notify so the user knows it's coming
+    if a.command == "ensure":
+        # Launch-if-off, no-op-if-on — NEVER activates. Bound (via Karabiner) to the same key WITH key pass-through,
+        # so when Sheru is on the in-process hotkey still handles activation, and when off this brings it up.
+        import socket
+        from . import config
+        try:
+            c = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            c.connect(str(config.DATA_DIR / "sheru.sock")); c.sendall(b"ping"); c.close()
+            return 0                 # already running — do nothing (activation is handled by the passed-through key)
+        except OSError:
+            return _launch_sheru()   # off -> launch, no activation
     # single-instance guard: if a Sheru is already running (its trigger socket accepts a connection), just ACTIVATE
     # it and exit — don't start a duplicate that fights over the mic + hotkey (looked like a crash / 'won't restart').
     if not a.text and not a.listen:
