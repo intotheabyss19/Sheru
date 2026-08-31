@@ -31,6 +31,25 @@ Researched 2026-08-31, tailored to Yash. Only **OCR** was built; the rest are do
 
 ---
 
+## Audio front-end / speech capture
+- ✅ **Voice-Processing I/O (AEC + AGC + noise suppression)** — mic capture routes through Apple's `AVAudioEngine`
+  `setVoiceProcessingEnabled` (the front-end Siri/FaceTime use), replacing the raw sounddevice path + the OS-mic-gain
+  hacks. `src/sheru/avcapture.py` (one shared VP engine — two conflict; PTT and the always-on listener coordinate
+  via a ptt flag). Auto-falls back to sounddevice if the engine can't start (`SHERU_VOICE_PROCESSING=0` forces raw).
+- ✅ **Silence/noise hallucination gate** — Whisper invents canned phrases on near-silence ("Thank you.", "I'm
+  sorry. …"). Three layers: STT confidence gate (`compression_ratio > 2.4` / logprob / no-speech, `stt._hallucinated`),
+  an energy floor before STT (`capture_once`), and the PTT loop treating empty text as a quiet window (no re-arm →
+  can't spin). AGC amplifies room hiss, so these matter more with VP, not less.
+- 📋 **Pin VP to the built-in mic** — the VP engine currently uses the **system default input** (correct for AEC,
+  which pairs input+output). Yash's rule is "always built-in mic"; if a headset is ever the default, VP would grab
+  it. To force built-in: set `kAudioOutputUnitProperty_CurrentDevice` on the input node's `auAudioUnit` (needs the
+  built-in's `AudioDeviceID` via CoreAudio HAL). Not built — default-input is right for now.
+- 💡 **Barge-in** — AEC now cancels Sheru's own TTS from the mic, so interrupting mid-reply ("Sheru, stop") is newly
+  feasible. Today the always-on listener still drops audio while speaking (`is_busy`); lifting that + a fast
+  "stop"-word check would enable barge-in.
+
+---
+
 ## Mouseless / text-box control (full research: `docs/RESEARCH-mouseless-typing.md`)
 🔬 Now buildable (Accessibility is granted). 469-line doc, API constants verified vs pyobjc. To build a `src/sheru/ax.py`:
 - Reliable **WhatsApp send** — enable Electron AX tree, verify the composer loaded, `AXPress` the Send button (drop the blind sleep+Return in typing mode).

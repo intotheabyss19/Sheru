@@ -56,6 +56,12 @@ STT_LANG = os.environ.get("SHERU_STT_LANG") or _P.get("stt_lang") or None
 # MacBook mic (best voice isolation + noise rejection). Set profile 'mic_device' (via the menu-bar picker) or SHERU_MIC.
 MIC_DEVICE = os.environ.get("SHERU_MIC") or _P.get("mic_device") or None
 
+# Route mic capture through Apple's Voice Processing I/O (AVAudioEngine, setVoiceProcessingEnabled) — the same
+# front-end Siri/FaceTime use: hardware-grade AEC (cancels Sheru's own TTS from the mic, so it can't re-trigger or
+# garble itself), AGC (no clipping — retires the mic-gain hacks), and noise suppression. Falls back to the raw
+# sounddevice path automatically if the engine can't start. Set SHERU_VOICE_PROCESSING=0 to force the raw path.
+VOICE_PROCESSING = (os.environ.get("SHERU_VOICE_PROCESSING") or _P.get("voice_processing") or "1") not in ("0", "false", "no")
+
 # Listening animation shown on activation: "orb" (glowing orb, lightest) or "particles" (particle swirl).
 ORB_STYLE = os.environ.get("SHERU_ORB") or _P.get("orb_style") or "orb"
 

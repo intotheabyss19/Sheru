@@ -20,6 +20,13 @@ survives reboots** (runs as a LaunchAgent — the old `.app` couldn't show an ic
   crash used to silently kill the whole voice loop** (mic just closed → "it stopped for no reason"); now it survives
   and says so. Also: "remind me to check the weather" / "text mom the weather looks bad" no longer misroute to a
   weather lookup; a half-finished message draft no longer hijacks your next command; "stop it" now cancels Claude.
+- **★★ Audio overhaul — "how Siri does it" (your garbling/looping question):** Sheru's mic now runs through Apple's
+  **Voice-Processing engine** — the same front-end Siri/FaceTime use: **echo cancellation** (Sheru's own voice can't
+  re-trigger or garble it), **auto gain** (no more clipping — this retires the old mic-volume hack that was *causing*
+  the garbling), and **noise suppression**. On top, a **3-layer anti-hallucination gate** so it stops inventing
+  phantom speech on silence (Whisper's canned "Thank you." / "I'm sorry." loops): it now says **"no speech captured"**
+  and closes cleanly instead of spinning. Verified live end-to-end. Falls back to the old mic path automatically if
+  the engine can't start. *This is the fix for the recurring "it keeps listening / garbles / won't stop" problem.*
 
 **⚙️ Your ~2-minute setup to unlock the rest:**
 1. Menu-bar **✦ → 🔓 Grant Permissions** → enable Sheru under **Accessibility** + **Microphone** (it's a new

@@ -11,6 +11,7 @@ Three backends (SHERU_STT):
 """
 from __future__ import annotations
 
+import logging
 import os
 import re
 import time
@@ -18,6 +19,26 @@ import time
 import numpy as np
 
 from . import config
+
+_log = logging.getLogger("sheru.stt")
+
+
+def _hallucinated(r: dict) -> bool:
+    """True if a Whisper result is a silence/noise hallucination rather than real speech — so it can be dropped
+    before it drives an action or (worse) arms a follow-up and loops.
+
+    The reliable tell is a very high compression_ratio: on near-silence Whisper emits repeated filler
+    ('I'm sorry. I'm sorry. …', 'I'm a …'), which gzip-compresses far better than real speech. This is
+    Whisper's own anti-hallucination heuristic (threshold 2.4), which mlx-whisper doesn't enforce. On
+    AGC-boosted hiss no_speech_prob/avg_logprob are unreliable (the model is falsely confident), so
+    compression_ratio is primary; the logprob/no-speech bounds only catch the rare non-repetitive case."""
+    segs = r.get("segments") or []
+    if not segs:
+        return False
+    comp = max((s.get("compression_ratio", 0.0) or 0.0) for s in segs)
+    lp = min((s.get("avg_logprob", 0.0) or 0.0) for s in segs)
+    nsp = max((s.get("no_speech_prob", 0.0) or 0.0) for s in segs)
+    return comp > 2.4 or lp < -1.1 or nsp > 0.9
 
 
 def _collapse_repeats(text: str) -> str:
@@ -122,12 +143,17 @@ class Transcriber:
                                        "(Hinglish); keep Hindi words in Devanagari, do not translate.")
             def _do():
                 if forced:
-                    return mlx_whisper.transcribe(audio, language=forced, **opts).get("text", "")
+                    return mlx_whisper.transcribe(audio, language=forced, **opts)
                 r = mlx_whisper.transcribe(audio, **opts)                    # auto-detect...
                 if r.get("language") not in ("en", "hi"):                    # ...clamp: never accept Russian/other on Hindi or noise
                     r = mlx_whisper.transcribe(audio, language="en", **opts)
-                return r.get("text", "")
-            text = mlx_pool.run(_do)
+                return r
+            r = mlx_pool.run(_do)
+            text = r.get("text", "")
+            if text.strip() and _hallucinated(r):        # drop silence/noise hallucinations before they act or loop
+                _log.info("stt dropped hallucination %r (comp_ratio=%.1f)", text.strip()[:40],
+                          max((s.get("compression_ratio", 0.0) or 0.0) for s in (r.get("segments") or [{}])))
+                text = ""
         else:
             import mlx.core as mx
             from parakeet_mlx.audio import get_logmel

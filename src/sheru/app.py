@@ -555,7 +555,13 @@ class Sheru:
                 audio = capture_once(max_wait=wait, cfg=(None if first else fu_cfg))   # stricter on follow-ups
                 self._followup_armed = False              # consume; handle_text re-arms if this reply invites one
                 self._ended_convo = False                 # handle_text sets this True only on an explicit sign-off
-                if audio is None:
+                # Transcribe up front. A window with no USABLE speech — the mic timed out (audio None) OR the STT
+                # returned '' (a silence/noise hallucination dropped by the confidence gate) — is a "quiet window":
+                # it must NOT arm a follow-up, or the loop spins forever on room noise (the AGC amplifies hiss).
+                text = self.stt.transcribe(audio) if audio is not None else ""
+                if audio is not None:
+                    log.info("ptt stt %.2fs: %r", self.stt.last_latency, text)
+                if not text.strip():
                     if first:
                         if self.panel is not None:
                             self.panel._set_out("(didn't catch anything — speak a bit louder/closer)")
@@ -579,8 +585,6 @@ class Sheru:
                     log.info("ptt: quiet after 'Anything else?' — ending the conversation")
                     break
                 self._asked_done = False                  # a real reply -> reset the 'checked in' state
-                text = self.stt.transcribe(audio)
-                log.info("ptt stt %.2fs: %r", self.stt.last_latency, text)
                 from . import recorder
                 recorder.save(audio, text, self.stt.last_latency, kind="voice")
                 cmd = self.strip_wake(text)                # strip an optional wake word if still said
@@ -981,13 +985,15 @@ class Sheru:
             self.llm.load()
         self.stt.transcribe(__import__("numpy").zeros(16000, dtype="float32"))  # loads parakeet
         log.info("models warm in %.1fs (tts voice: %s)", time.perf_counter() - t0, self.speaker.voice_name)
-        try:                                       # a hot mic (input >75%) CLIPS -> Whisper hallucinates gibberish.
-            import subprocess                       # cap it at 65% on startup (reboots reset it back up). Don't raise a low one.
-            cur = int(subprocess.run(["osascript", "-e", "input volume of (get volume settings)"],
-                                     capture_output=True, text=True, timeout=4).stdout.strip() or 65)
-            if cur > 75:
-                subprocess.run(["osascript", "-e", "set volume input volume 65"], capture_output=True, timeout=4)
-                log.info("mic input was %d%% (clips) -> set to 65%%", cur)
+        try:                                       # raw-mic fallback only: a hot mic (>75%) CLIPS -> Whisper gibberish.
+            from . import avcapture                 # with Voice-Processing I/O active, its AGC handles level — leave gain alone.
+            if not avcapture.available():
+                import subprocess                   # cap it at 65% on startup (reboots reset it back up). Don't raise a low one.
+                cur = int(subprocess.run(["osascript", "-e", "input volume of (get volume settings)"],
+                                         capture_output=True, text=True, timeout=4).stdout.strip() or 65)
+                if cur > 75:
+                    subprocess.run(["osascript", "-e", "set volume input volume 65"], capture_output=True, timeout=4)
+                    log.info("mic input was %d%% (clips) -> set to 65%%", cur)
         except Exception:
             pass
         self._warm = True
@@ -1043,9 +1049,13 @@ class Sheru:
         self.status = "listening"
 
     def _ensure_mic_level(self) -> None:
-        # Keep the mic at a NON-CLIPPING level. This used to RAISE it to 90%, which CLIPS the input -> Whisper
-        # hallucinates gibberish (the recurring garbled-STT bug). 65% + the STT's own peak-normalization handles a
-        # quiet mic fine; clipping is destructive and unrecoverable. Enforce ~65% whenever it has drifted.
+        # Voice-Processing I/O runs its own AGC, so leave the OS input gain alone when it's active — poking the
+        # hardware gain is the anti-pattern that caused the clipping/garbling in the first place.
+        from . import avcapture
+        if avcapture.available():
+            return
+        # Raw-mic fallback only: keep the mic at a NON-CLIPPING level. This used to RAISE it to 90%, which CLIPS
+        # the input -> Whisper hallucinates gibberish. 65% + the STT's peak-normalization handles a quiet mic fine.
         import subprocess
         try:
             cur = int(subprocess.run(["osascript", "-e", "input volume of (get volume settings)"],
