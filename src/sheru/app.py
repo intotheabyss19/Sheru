@@ -688,6 +688,12 @@ class Sheru:
             self._onboarding = Onboarding.alloc().initWithApp_(self)
         self._onboarding.show()
 
+    def show_settings(self) -> None:
+        if getattr(self, "_settings", None) is None:
+            from .settings import Settings
+            self._settings = Settings.alloc().initWithApp_(self)
+        self._settings.show()
+
     def _ensure_panel(self) -> None:
         """Create the 'Type to Sheru' panel (hidden) so the voice sink can render into it even before it's shown."""
         if self.panel is None:
@@ -1231,16 +1237,13 @@ def run_menubar(app: Sheru) -> None:
                 style.add(it); self._orb_items[key] = it
             # Native-style menu: no emoji, grouped by separators (None), submenus for settings, dialog items end
             # with "…". Primary actions first, then history, settings, alarm status, setup, quit.
+            # Minimal menu — voice / mic / listening-style / loudness / cues / preferences now live in Settings.
             self.menu = [
                 "Talk to Sheru",
                 "Type to Sheru",
                 None,
                 "History",
-                None,
-                voice,                 # Voice ▸
-                mic,                   # Microphone ▸
-                style,                 # Listening Style ▸
-                "Mute",
+                "Settings…",
                 None,
                 self._alarm_item,      # "No Alarms Set" / "<label> in <time>"
                 self._stop_item,       # Stop Ringing
@@ -1353,6 +1356,10 @@ def run_menubar(app: Sheru) -> None:
         @rumps.clicked("History")
         def _history(self, _):
             app.show_history_panel()
+
+        @rumps.clicked("Settings…")
+        def _settings(self, _):
+            app.show_settings()
 
         @rumps.clicked("Grant Permissions…")
         def _grant(self, _):
