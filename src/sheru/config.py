@@ -62,7 +62,7 @@ def user_preferences() -> str:
 
 SAMPLE_RATE = 16_000
 WAKE_WORDS = ("hey sheru", "sheru")
-LOCAL_LLM = os.environ.get("SHERU_LLM") or _P.get("llm_model") or "mlx-community/Qwen3-4B-Instruct-2507-4bit"   # resident tier. Instruct-2507 4B beats base 4B on tool-routing (84% vs 79% on our eval) at the SAME ~2.5GB/speed; 8B only warmer chit-chat at 2x RAM (freezes on 16GB). Override via profile 'llm_model' / SHERU_LLM.
+LOCAL_LLM = os.environ.get("SHERU_LLM") or _P.get("llm_model") or "mlx-community/Qwen3-4B-Instruct-2507-4bit"   # resident tier. DEFAULT here is the stock 2507-4bit, but the profile points at a LOCAL conversion of huihui's abliterated 2507 (scripts/setup_huihui_llm.sh) which routes 95% vs the stock quant's 76% on our eval AND refuses far less. 8B only warmer chit-chat at 2x RAM (freezes on 16GB). Override via profile 'llm_model' / SHERU_LLM.
 LOCAL_LLM_FAST = os.environ.get("SHERU_LLM_FAST") or None                       # optional light tier; set to e.g. mlx-community/Qwen3-4B-4bit
 LOCAL_ADAPTER = os.environ.get("SHERU_ADAPTER") or _P.get("llm_adapter") or None  # optional LoRA adapter dir served on top of LOCAL_LLM (no fuse); set by fine-tuning once it beats base
 

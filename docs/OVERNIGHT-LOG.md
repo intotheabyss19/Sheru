@@ -38,14 +38,15 @@ the logs). Rewrote it to "warm, natural, light — no recurring bits", explicitl
 custom image, sound-cue theme, reply language, the **preferences editor**, "open a trainer session", and **Quit
 (free memory)**. The menu bar is now minimal. (Custom-orb-image is stored but not yet rendered — follow-up.)
 
-**★ huihui experiment (you asked me to try both):**
-- **Text abliterated** (`Josiefied-Qwen3-4B-abliterated`): **74%** on the router eval vs base **76%** → *fails the
-  gate, kept base.* Abliteration slightly hurts tool-routing, as expected. The over-refusal you wanted gone was
-  fixed by the prompt rewrite instead.
-- **Vision abliterated** (`huihui Qwen3-VL-4B-Instruct`, MLX 4-bit): **excellent.** Read a test UI **verbatim** and
-  grounded buttons by colour+position ("the green Send button is on the right"). This is the one worth adopting —
-  it's the engine for the screen-vision idea (read screen / click by label). Runs in an isolated env (~2.5 GB).
-  Details + next steps in `docs/BACKLOG.md` ▸ Local models.
+**★ huihui — SWITCHED to it for BOTH (you called it).** My first "keep base" verdict was wrong: I'd tested an
+abliterated of the *old* Qwen3-4B, not your 2507 base. The fair test flipped it hard:
+- **Text:** `huihui Qwen3-4B-Instruct-2507-abliterated` (converted to local MLX 4-bit) scored **95% (36/38)** on the
+  router eval vs the stock 2507-4bit's **76% (29/38)** — a much better router *and* far less refusal. **Now your
+  default** (`scripts/setup_huihui_llm.sh` recreates it; fine-tune on top later). You were right — the 2% was noise,
+  and the real gap went the *other* way.
+- **Vision:** `huihui Qwen3-VL-4B-Instruct-abliterated` now powers **"what's on my screen"** — reads the screen
+  verbatim + describes buttons, far richer than OCR (OCR stays as fallback). Runs in an isolated venv
+  (`scripts/setup_vlm.sh`); ~8 s per call for now (a persistent server would make it snappy — noted follow-up).
 
 **⚠️ One honest thing:** while screenshotting the Settings window to check its layout, I captured your **live screen**
 (you were on a video call) instead of the window. I deleted it immediately, didn't use it, and switched to rendering

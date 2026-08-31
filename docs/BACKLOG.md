@@ -67,7 +67,14 @@ Researched 2026-08-31, tailored to Yash. Only **OCR** was built; the rest are do
 ---
 
 ## Local models / LLM
-- ✅ **TESTED 2026-09-01 — abliterated TEXT model does NOT pass the router gate; keep base.** `Josiefied-Qwen3-4B-abliterated-v1-4bit` scored **74%** on `scripts/eval_router.py` vs base Qwen3-4B-Instruct-2507 **76%** (chat-negs 6/6 both). Marginally worse at tool-routing — as the roadmap warned abliteration would be. The over-refusal / personality problem was fixed instead by softening the system prompt (dropping the "JARVIS" framing) + `data/preferences.md`. Don't swap the router to an abliterated model.
+- ✅ **SWITCHED 2026-09-01 — abliterated TEXT model (the RIGHT base) wins big; now the default.** First test used
+  `Josiefied-Qwen3-4B-abliterated` (abliterated from the OLD Qwen3-4B, not 2507) → 74% vs 76%, a red herring. The
+  fair test — huihui's abliterated of Sheru's ACTUAL base, `Huihui-Qwen3-4B-Instruct-2507-abliterated`, converted to
+  local MLX 4-bit — scored **95% (36/38)** vs the stock `mlx-community/Qwen3-4B-Instruct-2507-4bit` **76% (29/38)**,
+  chat-negs 6/6 both. A much better router AND far less refusal. Set as `profile.llm_model` (a local path in
+  `data/models/`, gitignored — recreate with `scripts/setup_huihui_llm.sh`). Caveat: my convert is 4.5 bpw vs the
+  stock older 4-bit quant, so some gain may be quant quality, not only abliteration — didn't chase the attribution
+  since it's a clear win. Fine-tune on top of this later (per Yash).
 - ✅ **TESTED 2026-09-01 — abliterated VISION model is EXCELLENT; pursue for screen-vision.** `EZCon/Huihui-Qwen3-VL-4B-Instruct-abliterated-4bit-...-mlx` (MLX 4-bit, ~2.5GB) read a synthetic UI **verbatim** (recipient, subject, full body) and grounded controls with color+position ("the green Send button is on the right") — via `mlx-vlm` 0.6.17 (`qwen3_vl` supported). Runs in an **isolated venv** (mlx-vlm's deps conflict with Sheru's; needs `jinja2`). **Next:** wire it as the OCR/vision engine for the screen-vision sub-project (read screen / find + click by label), on demand (separate ~2.5GB process — budget RAM: quit or shrink the resident LLM while it runs). This is the abliterated model that's worth adopting.
 - 🔬 **huihui-ai "abliterated" (uncensored) Qwen3** — background on the family. huihui-ai publishes
   *abliterated* models (a technique that removes the refusal direction from the weights, so the model stops
