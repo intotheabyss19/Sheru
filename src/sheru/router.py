@@ -81,6 +81,18 @@ class Router:
         (re.compile(r"^(?:stop|turn off|disable|pause)\s+recording\b.*|^stop saving\b.*"), "rec_off"),
         (re.compile(r"^(?:start|turn on|enable|resume)\s+recording\b.*"), "rec_on"),
         (re.compile(r"^(?:stop|pause|halt)\s+(?:the\s+|this\s+|that\s+|my\s+)?(?:music|song|playback|track|video|audio)\b.*$"), "media_pause"),
+        # Explicit "close the conversation" phrases — end the listening loop (keep the app running). High priority so
+        # "stop listening" / "quit sheru" close the mic instead of hitting the stop-action or quit-app rules. Tolerant
+        # of leading filler ("okay", "thanks") and trailing ("now", "please", "sheru").
+        (re.compile(r"^(?:(?:ok(?:ay)?|alright(?:\s+then)?|cool|great|perfect|thanks?|thank you|yeah|yep)[,.\s]+)*"
+                    r"(?:bye(?:\s+sheru)?|goodbye|good\s?bye|(?:quit|close|exit|dismiss)\s+sheru|"
+                    r"stop\s+listening|stop\s+(?:the\s+)?conversation|end\s+(?:the\s+)?conversation|"
+                    r"go\s+to\s+sleep|sleep\s+now|good\s?night(?:\s+sheru)?|"
+                    r"we'?re\s+done|we\s+are\s+done|i'?m\s+done|i\s+am\s+done|"
+                    r"that'?s\s+all|that'?s\s+it|that'?ll\s+be\s+all|that\s+is\s+all|"
+                    r"see\s+(?:you|ya)(?:\s+later)?|(?:talk|catch\s+you)\s+later|later\s+sheru|"
+                    r"nothing\s+else|that'?s\s+everything|leave\s+it|shush)"
+                    r"[,.\s]*(?:now|please|for\s+now|then|sheru)?[.!\s]*$"), "end_convo"),
         (re.compile(r"^(?:stop|cancel|never ?mind|shut up|quiet|enough)\b(?!\s+(?:do not disturb|dnd|focus))|^that'?s enough\b|^okay,? that'?s enough\b"), "stop"),
         # TYPING / dictation mode — speak and Sheru types it into the active field (before the generic 'open' rule)
         (re.compile(r"^(?:open|go to|pull up|start)\s+(.+?)(?:'?s)?\s+(?:chat|conversation|whats\s?app|messages?)\s+and\s+(?:then\s+)?(?:activate|enable|start|turn on|begin|go into)\s+(?:the\s+)?(?:typing|dictation|type|hands\s?free)\s+mode$"), "typing_open"),
@@ -243,7 +255,12 @@ class Router:
             return Result("")
         if kind == "end_convo":                            # a warm sign-off; no follow-up -> the mic loop ends
             import random
-            return Result(random.choice(["Anytime.", "Sure thing.", "You got it.", "Happy to help.", "Okay!"]))
+            return Result(random.choice([
+                "Okay, I'll stop listening. Tap or say Sheru when you need me.",
+                "Sure — going quiet now. Just call me when you need me.",
+                "Alright, I'll let you go. Tap the key anytime.",
+                "Got it, signing off. Say Sheru whenever.",
+            ]))
         if kind == "typing_open":
             return Result("", typing={"on": True, "recipient": g[0].strip(), "app": "whatsapp"})
         if kind == "typing_on":

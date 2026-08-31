@@ -551,7 +551,8 @@ class Sheru:
                 wait = 8.0 if first else max(getattr(self, "_followup_window", 6.0), 6.0)
                 if not first:
                     log.info("ptt: follow-up window open %.0fs — say your next thing", wait)
-                    self._listen_cue()                # a soft 'your turn' tone so you know it's listening, eyes-free
+                self._listen_cue()                    # a soft 'your turn' tone (EVERY open, first + follow-up) so you
+                self._cued_speak = False              # know exactly when to speak; re-arm the 'about to speak' cue
                 audio = capture_once(max_wait=wait, cfg=(None if first else fu_cfg))   # stricter on follow-ups
                 self._followup_armed = False              # consume; handle_text re-arms if this reply invites one
                 self._ended_convo = False                 # handle_text sets this True only on an explicit sign-off
@@ -673,6 +674,9 @@ class Sheru:
 
     def _say_both(self, text: str) -> None:
         """Normal mode: speak AND show in the panel."""
+        if not getattr(self, "_cued_speak", False):   # a soft, distinct 'Sheru is about to speak' tone before the
+            self._cued_speak = True                    # reply's first sentence — so you know to stop and listen
+            self._speak_cue()
         self.speaker.speak(text)
         if self.panel is not None:
             self.panel._append(text)
@@ -898,11 +902,20 @@ class Sheru:
         threading.Thread(target=_go, name="sheru-search", daemon=True).start()
 
     def _listen_cue(self) -> None:
-        """A soft, short tone signalling 'your turn' when the follow-up mic opens — so you know it's listening
+        """A soft, short tone signalling 'your turn — speak now' when the mic opens — so you know it's listening
         without watching the screen. Quiet + brief so it doesn't get recorded as speech."""
         try:
             import subprocess
-            subprocess.Popen(["afplay", "-v", "0.2", "/System/Library/Sounds/Pop.aiff"])
+            subprocess.Popen(["afplay", "-v", "0.3", "/System/Library/Sounds/Pop.aiff"])
+        except Exception:
+            pass
+
+    def _speak_cue(self) -> None:
+        """A soft, DISTINCT tone right before Sheru starts replying — 'I'm about to speak'. Different sound from the
+        listen cue (Tink vs Pop) so the two are unmistakable eyes-free: Pop = your turn, Tink = my turn."""
+        try:
+            import subprocess
+            subprocess.Popen(["afplay", "-v", "0.25", "/System/Library/Sounds/Tink.aiff"])
         except Exception:
             pass
 
