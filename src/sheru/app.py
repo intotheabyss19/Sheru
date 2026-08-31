@@ -901,23 +901,28 @@ class Sheru:
                 self._search_busy = False
         threading.Thread(target=_go, name="sheru-search", daemon=True).start()
 
+    def _cues(self) -> dict:
+        p = getattr(self, "_cue_paths", None)
+        if p is None:
+            from . import cues
+            p = self._cue_paths = cues.ensure_cues()
+        return p
+
     def _listen_cue(self) -> None:
-        """A short, bright tone signalling 'your turn — speak now' when the mic opens — audible across the room,
-        eyes-free. Pitched UP (-r 1.5) and loud (-v 0.9); -q 1 keeps the pitch-shift clean. AEC cancels it from
-        the mic so it isn't recorded as speech."""
+        """'Your turn — speak now', played when the mic opens: a clean, very-high RISING two-tone (Google/Siri
+        style, generated in cues.py), loud + eyes-free. AEC cancels it from the mic so it isn't recorded."""
         try:
             import subprocess
-            subprocess.Popen(["afplay", "-v", "0.9", "-r", "1.5", "-q", "1", "/System/Library/Sounds/Pop.aiff"])
+            subprocess.Popen(["afplay", "-v", "0.95", self._cues()["listen"]])
         except Exception:
             pass
 
     def _speak_cue(self) -> None:
-        """A bright, DISTINCT tone right before Sheru starts replying — 'my turn'. Different base sound from the
-        listen cue (Tink vs Pop), also loud + pitched up, so the two are unmistakable eyes-free: Pop = your turn,
-        Tink = my turn."""
+        """'Sheru is replying', played before the first reply sentence: a clean, very-high FALLING two-tone —
+        distinct from the rising listen cue so the two are unmistakable eyes-free (up = your turn, down = mine)."""
         try:
             import subprocess
-            subprocess.Popen(["afplay", "-v", "0.9", "-r", "1.5", "-q", "1", "/System/Library/Sounds/Tink.aiff"])
+            subprocess.Popen(["afplay", "-v", "0.95", self._cues()["speak"]])
         except Exception:
             pass
 
