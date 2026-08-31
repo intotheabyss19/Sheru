@@ -38,6 +38,28 @@ def update_profile(key: str, value) -> None:
     f.write_text(json.dumps(d, indent=2))
     _P[key] = value
 
+
+PREFERENCES_FILE = DATA_DIR / "preferences.md"
+_PREFS_CACHE = {"mtime": None, "text": ""}
+
+
+def user_preferences() -> str:
+    """User-editable personality/preferences (data/preferences.md), appended to the system prompt so Yash can shape
+    Sheru's tone and behavior without touching code (edited via the Settings GUI). Cached by mtime; '' if absent."""
+    try:
+        st = PREFERENCES_FILE.stat()
+    except OSError:
+        return ""
+    if _PREFS_CACHE["mtime"] != st.st_mtime:
+        try:
+            txt = PREFERENCES_FILE.read_text(encoding="utf-8").strip()
+        except OSError:
+            txt = ""
+        _PREFS_CACHE.update(mtime=st.st_mtime,
+                            text=("\n\n" + USER_NAME + "'s preferences — follow these:\n" + txt if txt else ""))
+    return _PREFS_CACHE["text"]
+
+
 SAMPLE_RATE = 16_000
 WAKE_WORDS = ("hey sheru", "sheru")
 LOCAL_LLM = os.environ.get("SHERU_LLM") or _P.get("llm_model") or "mlx-community/Qwen3-4B-Instruct-2507-4bit"   # resident tier. Instruct-2507 4B beats base 4B on tool-routing (84% vs 79% on our eval) at the SAME ~2.5GB/speed; 8B only warmer chit-chat at 2x RAM (freezes on 16GB). Override via profile 'llm_model' / SHERU_LLM.

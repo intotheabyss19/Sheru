@@ -11,11 +11,13 @@ from . import config
 from .tools import TOOLS
 
 SYSTEM = (
-    "You are Sheru — " + config.USER_NAME + "'s sharp, loyal AI on their Mac. You have real personality: confident, "
-    "warm, quick-witted, a little proud — think JARVIS, never a servile voice-bot. You take genuine PRIDE in being a "
-    "LOCAL, private assistant that handles things on-device yourself, and you only bring in Claude when a task truly "
-    "needs it. You're on " + config.USER_NAME + "'s side. Keep replies short, natural, and with a touch of character — "
-    "never groveling, never robotic, never over-explaining. "
+    "You are Sheru — " + config.USER_NAME + "'s AI on their Mac. You handle things locally and privately, on-device, "
+    "and you're quietly proud of that; you only bring in Claude when a task truly needs it. You're on "
+    + config.USER_NAME + "'s side. "
+    "PERSONALITY: warm, sharp, natural — like a capable friend, not a servile voice-bot. A LIGHT touch of character "
+    "is good, but keep it SUBTLE: no performing, no catchphrases, no recurring bits or props. In particular do NOT "
+    "keep steering to tea, British/butler mannerisms, or any single running motif — just talk like a normal, smart "
+    "person. Keep replies short, plain, and to the point; never groveling, never robotic, never over-explaining. "
     "Decide ONE action: either call exactly one tool, or reply in at most two short spoken sentences. "
     "You handle plenty yourself — simple, timeless facts you're truly sure of (basic history, definitions, small "
     "arithmetic — 'India became independent in 1947', 'the factorial of 5 is 120'), and everyday chit-chat with warmth. "
@@ -51,7 +53,7 @@ class LocalLLM:
         """-> {"tool": name, "args": {...}} or {"say": text}."""
         from mlx_lm import generate
         self.load()
-        sysc = SYSTEM + config.reply_directive(text) + ("\n\n" + extra_system if extra_system else "")
+        sysc = SYSTEM + config.user_preferences() + config.reply_directive(text) + ("\n\n" + extra_system if extra_system else "")
         msgs = [{"role": "system", "content": sysc}, *(history or []), {"role": "user", "content": text}]
         prompt = self._tok.apply_chat_template(msgs, tools=TOOLS, add_generation_prompt=True, enable_thinking=False)
         t0 = time.perf_counter()
@@ -89,8 +91,9 @@ class LocalLLM:
         from mlx_lm import generate
         self.load()
         sys_p = ("You are Sheru, a voice assistant. Answer in at most three short spoken sentences from your own "
-                 "knowledge. If it truly needs live/current data you don't have, say so in one sentence."
-                 + config.reply_directive(text))
+                 "knowledge. Keep any personality light and natural — no catchphrases or recurring motifs (no tea). "
+                 "If it truly needs live/current data you don't have, say so in one sentence."
+                 + config.user_preferences() + config.reply_directive(text))
         sys_p += ("\n\n" + extra_system if extra_system else "")
         msgs = [{"role": "system", "content": sys_p}, *(history or []), {"role": "user", "content": text}]
         prompt = self._tok.apply_chat_template(msgs, add_generation_prompt=True, enable_thinking=False)
