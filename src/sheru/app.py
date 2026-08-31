@@ -1043,13 +1043,17 @@ class Sheru:
         self.status = "listening"
 
     def _ensure_mic_level(self) -> None:
+        # Keep the mic at a NON-CLIPPING level. This used to RAISE it to 90%, which CLIPS the input -> Whisper
+        # hallucinates gibberish (the recurring garbled-STT bug). 65% + the STT's own peak-normalization handles a
+        # quiet mic fine; clipping is destructive and unrecoverable. Enforce ~65% whenever it has drifted.
         import subprocess
         try:
             cur = int(subprocess.run(["osascript", "-e", "input volume of (get volume settings)"],
-                                     capture_output=True, text=True).stdout.strip() or 50)
-            if cur < 85:
-                subprocess.run(["osascript", "-e", "set volume input volume 90"])
-                log.info("raised mic input volume %d -> 90", cur)
+                                     capture_output=True, text=True, encoding="utf-8", errors="replace")
+                      .stdout.strip() or 65)
+            if not (45 <= cur <= 70):
+                subprocess.run(["osascript", "-e", "set volume input volume 65"], capture_output=True, timeout=4)
+                log.info("mic input %d%% -> 65%% (avoid clipping)", cur)
         except Exception:
             pass
 

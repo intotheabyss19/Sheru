@@ -12,7 +12,10 @@ from urllib.parse import quote
 
 
 def _osa(script: str, timeout: int = 12) -> subprocess.CompletedProcess:
-    return subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=timeout)
+    # encoding must be UTF-8: WhatsApp's "Voice Call"/"Video Call" menu items carry a U+200E prefix (0xe2 …),
+    # which crashes the default ASCII decode under the LaunchAgent.
+    return subprocess.run(["osascript", "-e", script], capture_output=True, text=True,
+                          encoding="utf-8", errors="replace", timeout=timeout)
 
 
 def _all_names() -> list[str]:
@@ -145,11 +148,14 @@ def call_whatsapp(handle: str, video: bool = False, dry_run: bool = False) -> bo
     stops WITHOUT calling. Returns True only if the call item was found + clicked."""
     digits = re.sub(r"\D", "", handle)
     subprocess.run(["open", f"whatsapp://send?phone={digits}"], check=False)
-    for _ in range(25):                        # wait up to ~5 s for WhatsApp to come forward on that chat
+    for _ in range(40):                        # wait up to ~8 s for WhatsApp to come forward on that chat
         time.sleep(0.2)
         if _frontmost() == "WhatsApp":
             break
     else:
+        import logging
+        logging.getLogger("sheru").info("call_whatsapp: WhatsApp didn't come to the front (frontmost=%r)",
+                                        _frontmost())
         return False
     if dry_run:                                # verified up to the call — never actually rings
         return True
@@ -169,8 +175,14 @@ def call_whatsapp(handle: str, video: bool = False, dry_run: bool = False) -> bo
         end repeat
         return "notfound"
     end tell'''
-    r = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
-    return "ok" in (r.stdout or "")
+    r = subprocess.run(["osascript", "-e", script], capture_output=True, text=True,
+                       encoding="utf-8", errors="replace")   # the menu item name has a U+200E prefix
+    ok = "ok" in (r.stdout or "")
+    if not ok:                                 # log WHY: no "Call" menu bar item (AppleScript error) vs item not enabled
+        import logging
+        logging.getLogger("sheru").info("call_whatsapp: '%s' not clicked — stdout=%r stderr=%r",
+                                        item, (r.stdout or "").strip(), (r.stderr or "").strip()[-200:])
+    return ok
 
 
 def prefill(handle: str, text: str, app: str = "messages", dry_run: bool = False) -> str:
