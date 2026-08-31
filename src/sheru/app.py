@@ -52,6 +52,7 @@ class Sheru:
         self._orb_style = None       # which style the current orb was built with
         self.dry_send = False        # tests set True to avoid sending real messages     # skip Claude Code until this time after a hard failure
         self._typing_mode = False    # True while in hands-free TYPING mode: spoken words get typed into the active field
+        self._ended_convo = False    # set True for one turn by an explicit sign-off ("no"/"that's all") -> voice loop stops
         self._send_key = (36, [])    # per-session TYPING send key: (keycode, modifiers). Default Return; "send button is shift+enter" changes it
 
     # ---- one command end-to-end -------------------------------------------------
@@ -166,6 +167,8 @@ class Sheru:
         # gate below keep Sheru's own voice from re-triggering. (This replaces the old FIRE_AND_FORGET exclusion,
         # which forced an F5 press after every open/search/play — the #1 "continued conversation doesn't work".)
         tool = getattr(res, "tool", None)
+        if tool == "end_convo":                    # an explicit sign-off -> the voice loop stops after this turn
+            self._ended_convo = True
         asks_back = bool(res.speech) and res.speech.rstrip().endswith("?")   # a question needs time for a reply
         keep_open = bool(res.speech) and tool != "end_convo"
         if self._is_voice_sink(sink) and (res.followup or asks_back or keep_open):
@@ -551,6 +554,7 @@ class Sheru:
                     self._listen_cue()                # a soft 'your turn' tone so you know it's listening, eyes-free
                 audio = capture_once(max_wait=wait, cfg=(None if first else fu_cfg))   # stricter on follow-ups
                 self._followup_armed = False              # consume; handle_text re-arms if this reply invites one
+                self._ended_convo = False                 # handle_text sets this True only on an explicit sign-off
                 if audio is None:
                     if first:
                         if self.panel is not None:
@@ -610,11 +614,16 @@ class Sheru:
                 # Uses the flag (armed by THIS turn's reply), so the window is measured from now — AFTER speaking —
                 # not decayed by however long the reply took to say.
                 _armed = getattr(self, "_followup_armed", False)
-                log.info("ptt gate done: pending=%s followup_armed=%s typing=%s -> %s",
-                         self.pending is not None, _armed, self._typing_mode,
-                         "CONTINUE" if (self.pending is not None or _armed) else "END")
-                if self.pending is None and not _armed:
+                _ended = getattr(self, "_ended_convo", False)
+                log.info("ptt gate done: pending=%s armed=%s typing=%s ended=%s",
+                         self.pending is not None, _armed, self._typing_mode, _ended)
+                if _ended:                                    # an explicit sign-off ("no"/"that's all") -> stop now
+                    self._ended_convo = False
                     break
+                # Otherwise ALWAYS keep listening — the ONLY ways to end are a sign-off (above) or two quiet
+                # windows (silence -> "Anything else?" -> silence). Never close abruptly after a command (Yash's ask).
+                if self.pending is None and not _armed:
+                    self._followup_window = 20.0              # a command that didn't arm one (e.g. cancel) still gets a 20s window
                 first = False
         finally:
             self._listening = False
@@ -972,6 +981,15 @@ class Sheru:
             self.llm.load()
         self.stt.transcribe(__import__("numpy").zeros(16000, dtype="float32"))  # loads parakeet
         log.info("models warm in %.1fs (tts voice: %s)", time.perf_counter() - t0, self.speaker.voice_name)
+        try:                                       # a hot mic (input >75%) CLIPS -> Whisper hallucinates gibberish.
+            import subprocess                       # cap it at 65% on startup (reboots reset it back up). Don't raise a low one.
+            cur = int(subprocess.run(["osascript", "-e", "input volume of (get volume settings)"],
+                                     capture_output=True, text=True, timeout=4).stdout.strip() or 65)
+            if cur > 75:
+                subprocess.run(["osascript", "-e", "set volume input volume 65"], capture_output=True, timeout=4)
+                log.info("mic input was %d%% (clips) -> set to 65%%", cur)
+        except Exception:
+            pass
         self._warm = True
         try:
             from . import reminders
