@@ -137,10 +137,12 @@ NAME_SPOKEN = "Sheroo"                                           # how Sheru pro
 TTS_BACKEND = os.environ.get("SHERU_TTS") or _P.get("tts_backend") or "avspeech"
 KOKORO_MODEL = os.environ.get("SHERU_KOKORO", "mlx-community/Kokoro-82M-bf16")
 KOKORO_VOICE = os.environ.get("SHERU_KOKORO_VOICE") or _P.get("kokoro_voice") or "am_michael"   # male US; Hindi: hm_omega / hf_alpha
-KOKORO_SPEED = float(os.environ.get("SHERU_KOKORO_SPEED", "1.0"))
+KOKORO_SPEED = float(os.environ.get("SHERU_KOKORO_SPEED") or _P.get("kokoro_speed") or 1.0)
 # Kokoro renders quiet (~-27 dBFS); loudness-normalize each utterance to this TARGET RMS so talkback is properly
 # loud at system volume. 0.20 ≈ -14 dBFS (broadcast level); raise toward 0.25 for louder, lower for softer.
-TTS_GAIN = float(os.environ.get("SHERU_TTS_GAIN", "0.20"))
+TTS_GAIN = float(os.environ.get("SHERU_TTS_GAIN") or _P.get("tts_gain") or 0.20)
+# Sound-cue theme for the listen/speak tones (see cues.PRESETS): 'chime' | 'chime_high' | 'soft' | 'classic'.
+CUE_STYLE = os.environ.get("SHERU_CUE_STYLE") or _P.get("cue_style") or "chime"
 # Curated LOCAL (Kokoro) voices for the menu picker — every id verified present + synthesizing in Kokoro-82M. (id, label)
 KOKORO_VOICES = [
     ("am_michael", "Michael — US male"),
@@ -229,6 +231,27 @@ def set_mic(device) -> None:
     global MIC_DEVICE
     MIC_DEVICE = device
     update_profile("mic_device", device)
+
+
+def set_tts_gain(v: float) -> None:
+    """Talkback loudness — target RMS the Kokoro output is normalized to (0.10 soft … 0.30 loud). Persist it."""
+    global TTS_GAIN
+    TTS_GAIN = max(0.05, min(0.35, float(v)))
+    update_profile("tts_gain", TTS_GAIN)
+
+
+def set_kokoro_speed(v: float) -> None:
+    """Speaking rate for the local voice (0.8 slower … 1.3 faster). Persist it."""
+    global KOKORO_SPEED
+    KOKORO_SPEED = max(0.7, min(1.4, float(v)))
+    update_profile("kokoro_speed", KOKORO_SPEED)
+
+
+def set_cue_style(name: str) -> None:
+    """Sound-cue theme (see cues.PRESETS) for the listen/speak tones. Persist it; cues.ensure_cues() regenerates."""
+    global CUE_STYLE
+    CUE_STYLE = name
+    update_profile("cue_style", name)
 
 
 def sarvam_lang_for(text: str) -> str:

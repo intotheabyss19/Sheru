@@ -67,7 +67,9 @@ Researched 2026-08-31, tailored to Yash. Only **OCR** was built; the rest are do
 ---
 
 ## Local models / LLM
-- 🔬 **huihui-ai "abliterated" (uncensored) Qwen3** — evaluate as Sheru's local brain. huihui-ai publishes
+- ✅ **TESTED 2026-09-01 — abliterated TEXT model does NOT pass the router gate; keep base.** `Josiefied-Qwen3-4B-abliterated-v1-4bit` scored **74%** on `scripts/eval_router.py` vs base Qwen3-4B-Instruct-2507 **76%** (chat-negs 6/6 both). Marginally worse at tool-routing — as the roadmap warned abliteration would be. The over-refusal / personality problem was fixed instead by softening the system prompt (dropping the "JARVIS" framing) + `data/preferences.md`. Don't swap the router to an abliterated model.
+- ✅ **TESTED 2026-09-01 — abliterated VISION model is EXCELLENT; pursue for screen-vision.** `EZCon/Huihui-Qwen3-VL-4B-Instruct-abliterated-4bit-...-mlx` (MLX 4-bit, ~2.5GB) read a synthetic UI **verbatim** (recipient, subject, full body) and grounded controls with color+position ("the green Send button is on the right") — via `mlx-vlm` 0.6.17 (`qwen3_vl` supported). Runs in an **isolated venv** (mlx-vlm's deps conflict with Sheru's; needs `jinja2`). **Next:** wire it as the OCR/vision engine for the screen-vision sub-project (read screen / find + click by label), on demand (separate ~2.5GB process — budget RAM: quit or shrink the resident LLM while it runs). This is the abliterated model that's worth adopting.
+- 🔬 **huihui-ai "abliterated" (uncensored) Qwen3** — background on the family. huihui-ai publishes
   *abliterated* models (a technique that removes the refusal direction from the weights, so the model stops
   declining requests). Directly relevant: **`huihui-ai/Qwen3-4B-abliterated`** exists (Sheru runs Qwen3-4B), plus
   8B/14B/32B, MoE `Qwen3-30B-A3B` / `Qwen3.5-35B-A3B`, and **vision** `Qwen3-VL-4B/8B-Instruct-abliterated`
