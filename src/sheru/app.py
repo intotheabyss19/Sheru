@@ -1176,13 +1176,17 @@ def run_menubar(app: Sheru) -> None:
             self._cur_sym = None                   # currently-applied symbol (change-detection)
             self._alarm_item = rumps.MenuItem("No Alarms Set", callback=lambda _: app.show_alarms())
             self._stop_item = rumps.MenuItem("Stop Ringing", callback=lambda _: alarms.stop_ring())
-            # fixed 2-voice toggle (Sarvam cloud / local Kokoro) — a GUI option, not a voice command
-            self._voice_sarvam = rumps.MenuItem("Sarvam (shubh)", callback=lambda _: self._set_voice("sarvam"))
-            self._voice_local = rumps.MenuItem("Local (Kokoro)", callback=lambda _: self._set_voice("kokoro"))
-            self._voice_sarvam.state = 1 if config.TTS_BACKEND == "sarvam" else 0
-            self._voice_local.state = 1 if config.TTS_BACKEND != "sarvam" else 0
+            # Voice picker: choose a specific LOCAL (Kokoro) voice — several male options — or the Sarvam cloud voice.
+            self._voice_items = {}
             voice = rumps.MenuItem("Voice")
-            voice.add(self._voice_sarvam); voice.add(self._voice_local)
+            for vid, label in config.KOKORO_VOICES:
+                it = rumps.MenuItem(label, callback=lambda s, v=vid: self._set_kokoro_voice(v))
+                it.state = 1 if (config.TTS_BACKEND == "kokoro" and config.KOKORO_VOICE == vid) else 0
+                voice.add(it); self._voice_items[vid] = it
+            voice.add(rumps.separator)
+            self._voice_sarvam = rumps.MenuItem("Sarvam (cloud, Hindi)", callback=lambda _: self._set_voice("sarvam"))
+            self._voice_sarvam.state = 1 if config.TTS_BACKEND == "sarvam" else 0
+            voice.add(self._voice_sarvam)
             # microphone picker — the built-in mic is auto-preferred (best noise isolation); switch here
             from .audio import list_input_devices, preferred_device
             cur = preferred_device()
@@ -1229,7 +1233,20 @@ def run_menubar(app: Sheru) -> None:
             from . import config
             config.set_tts(backend)
             self._voice_sarvam.state = 1 if backend == "sarvam" else 0
-            self._voice_local.state = 1 if backend != "sarvam" else 0
+            for v, item in self._voice_items.items():      # a backend switch clears the specific-voice ticks
+                item.state = 1 if (backend == "kokoro" and v == config.KOKORO_VOICE) else 0
+
+        def _set_kokoro_voice(self, vid):
+            from . import config
+            config.set_kokoro_voice(vid)                    # sets the voice + switches to the local Kokoro backend
+            for v, item in self._voice_items.items():
+                item.state = 1 if v == vid else 0
+            self._voice_sarvam.state = 0
+            try:                                           # speak a short sample so you hear the new voice right away
+                name = dict(config.KOKORO_VOICES).get(vid, vid).split("—")[0].strip()
+                app.speaker.speak(f"This is {name}. How do I sound?")
+            except Exception:
+                pass
 
         def _set_orb_style(self, key):
             from . import config

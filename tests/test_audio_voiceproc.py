@@ -32,8 +32,9 @@ def _seg(comp=1.5, lp=-0.3, nsp=0.1):
 
 check("repetitive hallucination (high compression_ratio) is dropped",
       stt._hallucinated(_seg(comp=13.2)))            # the real 'I'm sorry. I'm sorry. …' signature
-check("very-low-confidence result is dropped", stt._hallucinated(_seg(lp=-1.5)))
-check("near-certain no-speech is dropped", stt._hallucinated(_seg(nsp=0.95)))
+check("both-signals-bad noise is dropped", stt._hallucinated(_seg(lp=-1.5, nsp=0.9)))
+check("low logprob ALONE is KEPT (real but imperfect speech)", not stt._hallucinated(_seg(lp=-1.5, nsp=0.1)))
+check("high no-speech ALONE is KEPT (falsely-confident model)", not stt._hallucinated(_seg(nsp=0.95, lp=-0.3)))
 check("normal speech stats are KEPT", not stt._hallucinated(_seg(comp=1.8, lp=-0.3, nsp=0.1)))
 check("a confident short command is KEPT", not stt._hallucinated(_seg(comp=0.9, lp=-0.2, nsp=0.0)))
 check("empty result (no segments) is not flagged", not stt._hallucinated({"segments": []}))

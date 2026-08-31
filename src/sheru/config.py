@@ -116,6 +116,20 @@ TTS_BACKEND = os.environ.get("SHERU_TTS") or _P.get("tts_backend") or "avspeech"
 KOKORO_MODEL = os.environ.get("SHERU_KOKORO", "mlx-community/Kokoro-82M-bf16")
 KOKORO_VOICE = os.environ.get("SHERU_KOKORO_VOICE") or _P.get("kokoro_voice") or "am_michael"   # male US; Hindi: hm_omega / hf_alpha
 KOKORO_SPEED = float(os.environ.get("SHERU_KOKORO_SPEED", "1.0"))
+# Kokoro renders quiet (~0.3 peak); peak-normalize each utterance to this so talkback is audible at system volume.
+TTS_GAIN = float(os.environ.get("SHERU_TTS_GAIN", "0.97"))
+# Curated LOCAL (Kokoro) voices for the menu picker — every id verified present + synthesizing in Kokoro-82M. (id, label)
+KOKORO_VOICES = [
+    ("am_michael", "Michael — US male"),
+    ("am_adam",    "Adam — US male"),
+    ("am_onyx",    "Onyx — US male"),
+    ("am_eric",    "Eric — US male"),
+    ("bm_george",  "George — UK male"),
+    ("bm_lewis",   "Lewis — UK male"),
+    ("bm_daniel",  "Daniel — UK male"),
+    ("hm_omega",   "Omega — Hindi male"),
+    ("af_heart",   "Heart — US female"),
+]
 
 # Sarvam (cloud) TTS: Bulbul v3 — real Indian-language voices, 11 languages. Needs network + a key from
 # dashboard.sarvam.ai. Set SHERU_TTS=sarvam. Put the key in data/profile.json as 'sarvam_api_key': the
@@ -160,6 +174,16 @@ def set_tts(backend: str) -> None:
     global TTS_BACKEND
     TTS_BACKEND = backend
     update_profile("tts_backend", backend)
+
+
+def set_kokoro_voice(voice_id: str) -> None:
+    """Pick a specific local Kokoro voice and switch to the Kokoro backend; persist both. The Speaker reads
+    KOKORO_VOICE per utterance, so it takes effect on the next reply."""
+    global KOKORO_VOICE, TTS_BACKEND
+    KOKORO_VOICE = voice_id
+    TTS_BACKEND = "kokoro"
+    update_profile("kokoro_voice", voice_id)
+    update_profile("tts_backend", "kokoro")
 
 
 def set_reply_lang(lang: str) -> None:

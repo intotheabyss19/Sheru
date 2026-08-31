@@ -38,7 +38,10 @@ def _hallucinated(r: dict) -> bool:
     comp = max((s.get("compression_ratio", 0.0) or 0.0) for s in segs)
     lp = min((s.get("avg_logprob", 0.0) or 0.0) for s in segs)
     nsp = max((s.get("no_speech_prob", 0.0) or 0.0) for s in segs)
-    return comp > 2.4 or lp < -1.1 or nsp > 0.9
+    # compression_ratio is the RELIABLE tell (repeated filler). avg_logprob/no_speech alone false-positive on real
+    # but imperfect speech (a quiet or accented utterance scores low but is genuine — dropping it eats real commands),
+    # so only treat them as a hallucination when BOTH are bad AND the text isn't clearly varied speech.
+    return comp > 2.4 or (lp < -1.3 and nsp > 0.85)
 
 
 def _collapse_repeats(text: str) -> str:

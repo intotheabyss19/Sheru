@@ -106,20 +106,6 @@ def release_shared() -> None:
         _log.info("mic: released Voice-Processing engine — mic idle")
 
 
-def _resample(x: np.ndarray, sr: int) -> np.ndarray:
-    """Resample mono float32 to 16 kHz. VP I/O usually already delivers 16 kHz (no-op); resample only if not."""
-    if sr == _TARGET_SR or x.size == 0:
-        return x
-    try:
-        import soxr
-        return soxr.resample(x, sr, _TARGET_SR).astype(np.float32)
-    except Exception:
-        from scipy.signal import resample_poly
-        from math import gcd
-        g = gcd(sr, _TARGET_SR)
-        return resample_poly(x, _TARGET_SR // g, sr // g).astype(np.float32)
-
-
 class AvSource:
     """AVAudioEngine + Voice-Processing capture. `.start()` opens the mic; `.read(timeout)` pops the next
     float32 mono 16 kHz block (raises queue.Empty on timeout); `.stop()` tears it down. Instantiate/​start on
@@ -133,6 +119,7 @@ class AvSource:
         self._inp = None
         self._tap = None          # keep a ref so the ObjC block isn't GC'd out from under CoreAudio
         self._sr = _TARGET_SR
+        self._rs = None           # stateful resampler when the device isn't already at 16 kHz
         self._logged_drop = False
 
     def start(self) -> "AvSource":
@@ -145,6 +132,11 @@ class AvSource:
             raise RuntimeError(f"setVoiceProcessingEnabled failed: {err}")
         fmt = inp.outputFormatForBus_(0)
         self._sr = int(fmt.sampleRate())
+        if self._sr != _TARGET_SR:
+            import soxr
+            # STATEFUL streaming resampler — keeps filter state across blocks. (Resampling each block on its own
+            # with the one-shot soxr.resample() leaves an edge transient every ~100 ms → garbled STT.)
+            self._rs = soxr.ResampleStream(self._sr, _TARGET_SR, 1, dtype="float32", quality="HQ")
 
         def _tap(buf, when):                       # CoreAudio real-time thread — must never raise
             try:
@@ -155,8 +147,11 @@ class AvSource:
                 if not chans:
                     return
                 a = np.frombuffer(chans[0].as_buffer(n), dtype=np.float32).copy()  # channel 0 only
-                if self._sr != _TARGET_SR:
-                    a = _resample(a, self._sr)
+                if self._rs is not None:
+                    a = self._rs.resample_chunk(a)          # stateful 48k→16k; may return a shorter/empty chunk
+                    if a is None or a.size == 0:
+                        return
+                    a = np.ascontiguousarray(a, dtype=np.float32)
                 try:
                     self._blocks.put_nowait(a)
                 except queue.Full:
