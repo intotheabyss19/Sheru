@@ -66,6 +66,23 @@ Researched 2026-08-31, tailored to Yash. Only **OCR** was built; the rest are do
 
 ---
 
+## Local models / LLM
+- 🔬 **huihui-ai "abliterated" (uncensored) Qwen3** — evaluate as Sheru's local brain. huihui-ai publishes
+  *abliterated* models (a technique that removes the refusal direction from the weights, so the model stops
+  declining requests). Directly relevant: **`huihui-ai/Qwen3-4B-abliterated`** exists (Sheru runs Qwen3-4B), plus
+  8B/14B/32B, MoE `Qwen3-30B-A3B` / `Qwen3.5-35B-A3B`, and **vision** `Qwen3-VL-4B/8B-Instruct-abliterated`
+  (could feed the screen-vision sub-project). **Why for Sheru:** the stock Instruct model over-refuses casual /
+  personal / Hinglish-slang asks (a personal assistant shouldn't). **Tradeoffs / gate before adopting:** (1) the
+  HF release is `Qwen3-4B-abliterated` (base 4B, NOT the `Instruct-2507` variant Sheru chose for routing) — so it
+  may REGRESS tool-routing; run it through `scripts/eval_router.py` and keep it only if it holds ≥ base (same
+  eval-gate rule as fine-tuning). (2) abliteration can degrade instruction-following / structured tool-JSON —
+  double-check with constrained decoding on the roadmap. (3) needs an **MLX 4-bit conversion** (`mlx_lm.convert`,
+  or find an mlx-community abliterated build). (4) not safety-optimized — fine for a private local assistant, keep
+  the pending-confirm gate for outward actions. Refs: [huihui-ai/Qwen3-4B-abliterated](https://huggingface.co/huihui-ai/Qwen3-4B-abliterated),
+  [Qwen3-VL-4B-Instruct-abliterated](https://huggingface.co/huihui-ai/Huihui-Qwen3-VL-4B-Instruct-abliterated).
+
+---
+
 ## Packaging / infra
 - 💡 **Proper self-contained (non-alias) `.app`** — current bundle is py2app **alias mode** (references the venv). If it's ever rebuilt/re-signed the TCC identity can shift → a re-grant. A fully embedded bundle would make the identity rock-stable. Build files: `packaging/setup_app.py` + `sheru_app_main.py`.
 - 🟡 **Fine-tuning** — kept base twice (overfits the narrow router; see `docs/FINETUNE-RESULT.md` + `docs/OVERNIGHT-LOG.md`). Honest gated pipeline + dataset ready in `data/finetune/` (gitignored). A retry needs a much larger, more diverse real corpus, not more iters.
