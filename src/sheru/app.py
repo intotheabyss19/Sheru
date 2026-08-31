@@ -1097,20 +1097,20 @@ def run_menubar(app: Sheru) -> None:
             super().__init__("Sheru", title="🦁", quit_button=None)
             self._icon_symbol = config.MENUBAR_ICON
             self._cur_sym = None                   # currently-applied symbol (change-detection)
-            self._alarm_item = rumps.MenuItem("⏰ Alarms: none", callback=lambda _: app.show_alarms())
-            self._stop_item = rumps.MenuItem("🔔 Stop ringing", callback=lambda _: alarms.stop_ring())
+            self._alarm_item = rumps.MenuItem("No Alarms Set", callback=lambda _: app.show_alarms())
+            self._stop_item = rumps.MenuItem("Stop Ringing", callback=lambda _: alarms.stop_ring())
             # fixed 2-voice toggle (Sarvam cloud / local Kokoro) — a GUI option, not a voice command
             self._voice_sarvam = rumps.MenuItem("Sarvam (shubh)", callback=lambda _: self._set_voice("sarvam"))
             self._voice_local = rumps.MenuItem("Local (Kokoro)", callback=lambda _: self._set_voice("kokoro"))
             self._voice_sarvam.state = 1 if config.TTS_BACKEND == "sarvam" else 0
             self._voice_local.state = 1 if config.TTS_BACKEND != "sarvam" else 0
-            voice = rumps.MenuItem("🔊 Voice")
+            voice = rumps.MenuItem("Voice")
             voice.add(self._voice_sarvam); voice.add(self._voice_local)
             # microphone picker — the built-in mic is auto-preferred (best noise isolation); switch here
             from .audio import list_input_devices, preferred_device
             cur = preferred_device()
             self._mic_items = {}
-            mic = rumps.MenuItem("🎙 Microphone")
+            mic = rumps.MenuItem("Microphone")
             auto = rumps.MenuItem("Auto (built-in)", callback=lambda _: self._set_mic(None))
             auto.state = 1 if config.MIC_DEVICE in (None, "") else 0
             mic.add(auto); self._mic_items["auto"] = auto
@@ -1120,15 +1120,33 @@ def run_menubar(app: Sheru) -> None:
                 mic.add(it); self._mic_items[idx] = it
             # listening animation style (orb / particles)
             self._orb_items = {}
-            style = rumps.MenuItem("✨ Listening style")
+            style = rumps.MenuItem("Listening Style")
             for key, label in (("orb", "Orb (lightest)"), ("particles", "Particles"),
                                ("rings", "Rings"), ("bars", "Bars")):
                 it = rumps.MenuItem(label, callback=lambda s, k=key: self._set_orb_style(k))
                 it.state = 1 if config.ORB_STYLE == key else 0
                 style.add(it); self._orb_items[key] = it
-            self.menu = ["🎙 Talk to Sheru", "Type to Sheru", "🕘 History", voice, mic, style,
-                         "🔓 Grant Permissions", "Setup / Permissions…", "🎵 Set up Spotify…", "Mute", None,
-                         self._alarm_item, self._stop_item, None, "Quit Sheru"]
+            # Native-style menu: no emoji, grouped by separators (None), submenus for settings, dialog items end
+            # with "…". Primary actions first, then history, settings, alarm status, setup, quit.
+            self.menu = [
+                "Talk to Sheru",
+                "Type to Sheru",
+                None,
+                "History",
+                None,
+                voice,                 # Voice ▸
+                mic,                   # Microphone ▸
+                style,                 # Listening Style ▸
+                "Mute",
+                None,
+                self._alarm_item,      # "No Alarms Set" / "<label> in <time>"
+                self._stop_item,       # Stop Ringing
+                None,
+                "Grant Permissions…",
+                "Set Up Spotify…",
+                None,
+                "Quit Sheru",
+            ]
 
         def _set_voice(self, backend):
             from . import config
@@ -1195,17 +1213,20 @@ def run_menubar(app: Sheru) -> None:
                     self._cur_sym = want_sym
                     self._apply_symbol(want_sym)
                 if ringing:
-                    self._alarm_item.title = "🔔 Alarm ringing — press Stop below"
+                    self._alarm_item.title = "Alarm Ringing"
+                    self._stop_item.set_callback(lambda _: alarms.stop_ring())   # enable
                 elif act:
                     n = act[0]
                     extra = f"  +{len(act) - 1} more" if len(act) > 1 else ""
-                    self._alarm_item.title = f"⏰ {n['label']} in {alarms.human_remaining(n['remaining'])}{extra}"
+                    self._alarm_item.title = f"{n['label']} in {alarms.human_remaining(n['remaining'])}{extra}"
+                    self._stop_item.set_callback(None)                            # nothing to stop -> greyed
                 else:
-                    self._alarm_item.title = "⏰ Alarms: none"
+                    self._alarm_item.title = "No Alarms Set"
+                    self._stop_item.set_callback(None)
             except Exception:
                 pass
 
-        @rumps.clicked("🎙 Talk to Sheru")
+        @rumps.clicked("Talk to Sheru")
         def _talk(self, _):
             app.activate()
 
@@ -1213,19 +1234,15 @@ def run_menubar(app: Sheru) -> None:
         def _type(self, _):
             app.show_type_panel()
 
-        @rumps.clicked("🕘 History")
+        @rumps.clicked("History")
         def _history(self, _):
             app.show_history_panel()
 
-        @rumps.clicked("🔓 Grant Permissions")
+        @rumps.clicked("Grant Permissions…")
         def _grant(self, _):
             app.request_permissions()
 
-        @rumps.clicked("Setup / Permissions…")
-        def _setup(self, _):
-            app.show_onboarding()
-
-        @rumps.clicked("🎵 Set up Spotify…")
+        @rumps.clicked("Set Up Spotify…")
         def _spotify(self, _):
             import subprocess
             from . import config
