@@ -52,6 +52,7 @@ class Sheru:
         self._orb_style = None       # which style the current orb was built with
         self.dry_send = False        # tests set True to avoid sending real messages     # skip Claude Code until this time after a hard failure
         self._typing_mode = False    # True while in hands-free TYPING mode: spoken words get typed into the active field
+        self._send_key = (36, [])    # per-session TYPING send key: (keycode, modifiers). Default Return; "send button is shift+enter" changes it
 
     # ---- one command end-to-end -------------------------------------------------
     CONFIRM = {"send", "send it", "yes", "yeah", "yep", "confirm", "go ahead", "do it", "sure", "okay send", "ok send"}
@@ -78,6 +79,18 @@ class Sheru:
                 if self._is_voice_sink(sink):
                     self.allow_followup(12)                # stay listening for the next normal command
                 return "typing-off"
+            _sk = re.match(r"^(?:set\s+)?(?:the\s+)?send\s+(?:button|key)\s+(?:is|to|as)\s+(.+)$"
+                           r"|^(?:use|send\s+with)\s+(.+?)(?:\s+to\s+send)?$", low)   # change the session's send key
+            if _sk:
+                spec = next((g for g in _sk.groups() if g), "")
+                parsed = self._parse_send_key(spec)
+                if parsed:
+                    self._send_key = parsed
+                    label = ("+".join(m.title() for m in parsed[1]) + "+Enter") if parsed[1] else "Enter"
+                    sink(f"Okay, I'll send with {label} in this typing session.")
+                    if self._is_voice_sink(sink):
+                        self.allow_followup(20)
+                    return "send-key-set"
             self._type_and_send(text)
             if self._is_voice_sink(sink):
                 self.allow_followup(20)                    # keep the mic open for the NEXT line to dictate
@@ -316,6 +329,7 @@ class Sheru:
                  "Accessibility, then ask me again.")
             permissions.request_accessibility()
             return "need-accessibility"
+        self._send_key = (36, [])                          # each typing session starts sending with Enter
         recipient = t.get("recipient")
         if recipient:
             contact = messaging.resolve_contact(recipient)
@@ -363,8 +377,25 @@ class Sheru:
         except Exception:
             front = ""
         if front in ("whatsapp", "messages", "telegram", "discord", "slack", "signal"):
-            subprocess.run(["osascript", "-e", 'tell application "System Events" to key code 36'],  # Return -> send
+            keycode, mods = getattr(self, "_send_key", (36, []))   # session send key (default Return; e.g. Shift-Enter)
+            modstr = (" using {" + ", ".join(f"{m} down" for m in mods) + "}") if mods else ""
+            subprocess.run(["osascript", "-e", f'tell application "System Events" to key code {keycode}{modstr}'],
                            capture_output=True, timeout=4)
+
+    @staticmethod
+    def _parse_send_key(spec: str):
+        """'shift enter' / 'command+return' -> (keycode, [modifiers]); None if unrecognized."""
+        s = spec.lower().replace("+", " ")
+        mods = []
+        if "shift" in s: mods.append("shift")
+        if "command" in s or "cmd" in s: mods.append("command")
+        if "control" in s or "ctrl" in s: mods.append("control")
+        if "option" in s or "alt" in s: mods.append("option")
+        if "enter" in s or "return" in s:
+            return (36, mods)
+        if "tab" in s:
+            return (48, mods)
+        return None
 
     def _handle_pending(self, text: str, sink) -> str:
         p = self.pending

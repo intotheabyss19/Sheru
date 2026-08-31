@@ -24,6 +24,8 @@ def _noop(*a, **k):
 
 shortcuts.run_shortcut = lambda *a, **k: None          # no shortcut exists in tests -> graceful "create it" path
 shortcuts.list_shortcuts = lambda *a, **k: []
+from sheru.actions import screen
+screen.read_screen = lambda *a, **k: "Inbox · 3 unread · Reply"   # don't screenshot during tests
 
 
 for mod, fns in {
@@ -164,6 +166,12 @@ check("'text mom the weather looks bad' -> message (not weather)", r.route("text
 check("'message dad who won the game' -> message (not current)", r.route("message dad who won the game").tool == "message")
 check("'whats the weather' still -> weather", r.route("whats the weather").tool == "weather")
 check("'what is the news today' still -> current", r.route("what is the news today").tool == "current")
+
+print("read screen (Vision OCR) — routing:")
+check("'what's on my screen' -> read_screen", r.route("what's on my screen").tool == "read_screen")
+check("'read my screen' -> read_screen", r.route("read my screen").tool == "read_screen")
+check("'what does the screen say' -> read_screen", r.route("what does the screen say").tool == "read_screen")
+check("read_screen speaks the OCR text", "Inbox" in (r.route("what's on my screen").speech or ""))
 
 print("window management (via Rectangle) — routing:")
 check("'maximize this window' -> window", r.route("maximize this window").tool == "window")

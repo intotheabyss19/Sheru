@@ -132,6 +132,7 @@ class Router:
         (re.compile(r"^(?:move|snap|put|shove)\s+(?:this\s+|the\s+|it\s+)?window\s+(?:to\s+the\s+|to\s+)?(left|right|top|bottom)$|^(left|right|top|bottom)\s+half$|^snap\s+(?:it\s+)?(left|right|top|bottom)$"), "window_half"),
         (re.compile(r"^(?:maximi[sz]e|full[\s-]?screen)\s+(?:this\s+|the\s+|it\s+)?window$|^(?:make\s+)?(?:this\s+|it\s+)?(?:window\s+)?full[\s-]?screen$|^maximi[sz]e\s+(?:this|it)$"), "window_max"),
         (re.compile(r"^cent(?:er|re)\s+(?:this\s+|the\s+)?window$"), "window_center"),
+        (re.compile(r"^(?:what'?s|whats|what is)\s+(?:on\s+)?(?:my\s+|the\s+)?screen\??$|^(?:read|read out|tell me what'?s on)\s+(?:my\s+|the\s+)?screen(?:\s+(?:to me|out loud|aloud))?\??$|^what does (?:my|the) screen say\??$"), "read_screen"),
         (re.compile(r"^(?:open|launch|start|run)\s+(?:the\s+)?(?!(?:a\s+|an\s+|my\s+)?(?:timer|alarm|stopwatch|reminder|countdown)\b)(?:a\s+|an\s+|my\s+)?(.+?)(?:\s+(?:app|application|browser))?$"), "open"),
         (re.compile(r"^(?:quit|close|kill)\s+(?!all (?:my|the|your) )(?:the\s+)?(.+?)(?:\s+(?:app|application))?$"), "quit"),
         (re.compile(r"^(?:switch|go|jump)\s+to\s+(?:the\s+)?(.+?)\s+profile$"), "profile"),
@@ -402,6 +403,13 @@ class Router:
             return Result(system.window("maximize", "Maximized."), tool="window")
         if kind == "window_center":
             return Result(system.window("center", "Centered."), tool="window")
+        if kind == "read_screen":
+            from .actions import screen
+            txt = screen.read_screen()
+            if not txt:
+                return Result("I couldn't read the screen — grant Sheru Screen Recording in System Settings → "
+                              "Privacy & Security if this keeps happening.", tool="read_screen", followup=True)
+            return Result(f"Here's what I can see: {txt}", tool="read_screen", followup=True)
         if kind == "media":
             cmd = {"resume": "play", "skip": "next", "back": "previous"}.get(g[0], g[0])
             return Result(system.media(cmd))
