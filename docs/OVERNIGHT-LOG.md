@@ -5,7 +5,58 @@ Times are local. Newest at the bottom.
 
 ---
 
-## 🌅 Aug 31 — latest session (read this first)
+## 🌅 Sep 1 — latest session (READ THIS FIRST)
+
+Big session. Sheru is currently **OFF** (you asked me to keep it off; I only started it briefly for tests). To
+turn it back on: menu-bar isn't there while it's off — run `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.sheru.assistant.plist`, or just tell me.
+
+**★ Your VRAM question:** yes — while idle (just waiting for F5), Sheru keeps its models resident in **unified
+memory (~5–6 GB)** so activation is instant; it does NOT unload between uses. **Quitting frees all of it** (menu
+▸ Quit, or the new Settings ▸ Quit button). Measured: quitting jumped free memory 34% → 63%.
+
+**★ Audio — fully overhauled (your biggest pain):**
+- **Mic garbling fixed.** Root cause was resampling the 48 kHz mic **per-block** (stateless) → distortion. Now a
+  stateful streaming resampler (proven 0.0000 error). Plus Apple **Voice-Processing I/O** (AEC/AGC/noise-suppress).
+- **Talkback loudness fixed.** Three things: the mic engine was **ducking** Sheru's own voice (set to Min now);
+  Kokoro renders at −27 dBFS (now loudness-normalized to −14); and a **soft limiter** removed the "stretched" edge.
+- **Mic no longer always-on.** It's released when a conversation ends (the orange indicator was staying lit — my
+  regression, fixed). **Voice/noise:** for off-axis background noise, turn on **Control Center ▸ Mic Mode ▸ Voice
+  Isolation** while Sheru listens (macOS won't let apps set it; it's a one-time toggle that sticks).
+- Hallucination + prompt-echo gates so silence/noise stops producing phantom commands.
+
+**★ Voices, cues, close phrases, latency:**
+- **8 local male voices** + a picker (Michael/Adam/Onyx/Eric US, George/Lewis/Daniel UK, Omega Hindi). Default now Michael.
+- **Sound cues** are clean **high sine chimes** now (rising = your turn, falling = mine), with themes.
+- **Close the conversation by voice:** "bye sheru", "quit sheru", "stop listening", "go to sleep", "we're done", etc.
+- **Latency:** first reply is instant now (Kokoro pipeline pre-warmed; was a ~3 s cold gap); follow-up mic re-opens ~0.8 s sooner.
+
+**★ Personality — de-tea'd.** The "JARVIS" framing was steering it into tea/butler tropes (you pushed back a lot in
+the logs). Rewrote it to "warm, natural, light — no recurring bits", explicitly no tea. Added an editable
+**`data/preferences.md`** Sheru reads live — write your tone/preferences there (or in Settings) and it adapts, no restart.
+
+**★ Settings GUI (new).** Menu bar ▸ **Settings…** opens a real window: voice + loudness/speed, mic, orb style +
+custom image, sound-cue theme, reply language, the **preferences editor**, "open a trainer session", and **Quit
+(free memory)**. The menu bar is now minimal. (Custom-orb-image is stored but not yet rendered — follow-up.)
+
+**★ huihui experiment (you asked me to try both):**
+- **Text abliterated** (`Josiefied-Qwen3-4B-abliterated`): **74%** on the router eval vs base **76%** → *fails the
+  gate, kept base.* Abliteration slightly hurts tool-routing, as expected. The over-refusal you wanted gone was
+  fixed by the prompt rewrite instead.
+- **Vision abliterated** (`huihui Qwen3-VL-4B-Instruct`, MLX 4-bit): **excellent.** Read a test UI **verbatim** and
+  grounded buttons by colour+position ("the green Send button is on the right"). This is the one worth adopting —
+  it's the engine for the screen-vision idea (read screen / click by label). Runs in an isolated env (~2.5 GB).
+  Details + next steps in `docs/BACKLOG.md` ▸ Local models.
+
+**⚠️ One honest thing:** while screenshotting the Settings window to check its layout, I captured your **live screen**
+(you were on a video call) instead of the window. I deleted it immediately, didn't use it, and switched to rendering
+the window **off-screen** (never touches your display). Won't happen again.
+
+**Test when you're up:** press F5, have a back-and-forth (louder, cleaner, male voice), say "bye sheru" to end;
+open **Settings…** and try the voices/cues; edit `preferences.md`. All committed + pushed on `overnight`+`main`.
+
+---
+
+## Aug 31 — earlier session
 **Sheru is live** on the base 2507 model with a **✦ sparkles** menu-bar icon that now **auto-starts at login and
 survives reboots** (runs as a LaunchAgent — the old `.app` couldn't show an icon due to a faceless-process bug).
 
