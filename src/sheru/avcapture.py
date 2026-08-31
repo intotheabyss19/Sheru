@@ -130,6 +130,15 @@ class AvSource:
         ok, err = inp.setVoiceProcessingEnabled_error_(True, None)
         if not ok:
             raise RuntimeError(f"setVoiceProcessingEnabled failed: {err}")
+        # VP I/O ducks OTHER audio by default (it behaves like a phone call), which makes Sheru's own TTS play
+        # attenuated while the mic engine is live during a conversation — the "talkback is so quiet" bug. Set the
+        # ducking to Min so the reply stays at full volume. (macOS 14+; harmless no-op on older systems.)
+        try:
+            cfg = AV.AVAudioVoiceProcessingOtherAudioDuckingConfiguration(
+                False, AV.AVAudioVoiceProcessingOtherAudioDuckingLevelMin)
+            inp.setVoiceProcessingOtherAudioDuckingConfiguration_(cfg)
+        except Exception as e:
+            _log.debug("VP ducking-config not settable (%s) — leaving default", e)
         fmt = inp.outputFormatForBus_(0)
         self._sr = int(fmt.sampleRate())
         if self._sr != _TARGET_SR:
