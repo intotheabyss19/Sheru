@@ -147,19 +147,17 @@ class Sheru:
                 AppHelper.callAfter(self.show_type_panel)
             except Exception:
                 pass
-        # After a spoken ANSWER, keep the mic open — the conversation stays alive until you end it ("no"/"that's
-        # all") or two quiet windows. Only DON'T re-arm after fire-and-forget actions (open/play/volume/timer…),
-        # where re-arming used to cause a mic-echo loop, and after an explicit sign-off.
-        FIRE_AND_FORGET = {"open", "quit", "switch", "gmail_open", "play_song", "yt_music", "youtube", "howto",
-                           "play_playlist", "remember_playlist", "volume", "volume_delta", "mute", "media",
-                           "media_pause", "skip", "timer", "alarm", "images", "url", "fs_make", "terminal_in",
-                           "term_claude", "trainer", "set_voice", "set_reply_lang", "use_browser", "profile",
-                           "wiki_open", "setup", "rec_on", "rec_off", "end_convo"}
+        # Keep the mic open after EVERY command so you can chain ("open X" → "no, open Y" → "now search Z")
+        # without re-pressing F5 — the conversation stays alive until you end it ("no"/"that's all"/"goodbye")
+        # or two quiet windows. Only a sign-off (end_convo) closes it. The strict follow-up VAD + the speaker-done
+        # gate below keep Sheru's own voice from re-triggering. (This replaces the old FIRE_AND_FORGET exclusion,
+        # which forced an F5 press after every open/search/play — the #1 "continued conversation doesn't work".)
         tool = getattr(res, "tool", None)
         asks_back = bool(res.speech) and res.speech.rstrip().endswith("?")   # a question needs time for a reply
-        answered = bool(res.speech) and tool not in FIRE_AND_FORGET          # an answer -> invite continuation
-        if self._is_voice_sink(sink) and res.speech and (res.followup or asks_back or answered):
-            self.allow_followup(25 if (res.followup or asks_back) else 20)
+        keep_open = bool(res.speech) and tool != "end_convo"
+        if self._is_voice_sink(sink) and (res.followup or asks_back or keep_open):
+            self.allow_followup(25 if (res.followup or asks_back) else 18)
+            log.info("mic RE-ARMED after tool=%s (continued conversation)", tool)
         self._record_turn(text, res.speech)
         return res.speech
 
@@ -336,8 +334,10 @@ class Sheru:
             self._typing_mode = True
             msg = "Typing mode on. I'll type what you say into the active window. Say 'disable typing mode' to stop."
         sink(msg)
-        if self._is_voice_sink(sink):
+        voice = self._is_voice_sink(sink)
+        if voice:
             self.allow_followup(20)                        # re-open the mic so the first dictated line is captured
+        log.info("typing mode ON (recipient=%s, voice_sink=%s, follow-up armed=%s)", recipient, voice, voice)
         return msg
 
     def _type_and_send(self, text: str) -> None:
@@ -561,16 +561,24 @@ class Sheru:
                 if self.panel is not None:
                     self.panel.set_status("🔊 speaking…")
                 t_end = time.monotonic() + 175
+                log.info("ptt gate: waiting for speaker/claude/search to finish (busy=%s speaking=%s search=%s)",
+                         self.claude.busy, self.speaker.speaking, self._search_busy)
                 while (self.claude.busy or self.speaker.speaking or self._search_busy) and time.monotonic() < t_end:
                     time.sleep(0.1)
                 time.sleep(0.6)                            # let a just-arrived FINAL sentence begin playing…
                 while (self.claude.busy or self.speaker.speaking or self._search_busy) and time.monotonic() < t_end:
                     time.sleep(0.1)                        # …then wait that out too
                 time.sleep(0.35)                           # echo guard: let the audio tail clear the mic buffer
+                if time.monotonic() >= t_end:
+                    log.warning("ptt gate: hit the 175s cap — speaker/claude/search never cleared")
                 # re-listen only when a follow-up is expected: a draft awaiting confirm, or a reply that armed one.
                 # Uses the flag (armed by THIS turn's reply), so the window is measured from now — AFTER speaking —
                 # not decayed by however long the reply took to say.
-                if self.pending is None and not getattr(self, "_followup_armed", False):
+                _armed = getattr(self, "_followup_armed", False)
+                log.info("ptt gate done: pending=%s followup_armed=%s typing=%s -> %s",
+                         self.pending is not None, _armed, self._typing_mode,
+                         "CONTINUE" if (self.pending is not None or _armed) else "END")
+                if self.pending is None and not _armed:
                     break
                 first = False
         finally:

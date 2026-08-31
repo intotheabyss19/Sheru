@@ -43,3 +43,24 @@ def request_automation() -> None:
 def request_all() -> None:
     request_accessibility(prompt=True)
     request_automation()
+
+
+from dataclasses import dataclass
+
+
+@dataclass
+class Perm:
+    key: str
+    label: str
+    why: str
+    granted: bool
+
+
+def status() -> list["Perm"]:
+    """Permission rows for the onboarding window (label / why / key / granted)."""
+    acc = accessibility_trusted()
+    return [
+        Perm("accessibility", "Accessibility", "F5 hotkey, typing mode, auto-send messages", acc),
+        Perm("microphone", "Microphone", "Hear your voice commands", True),      # granted lazily on first listen
+        Perm("automation", "Automation", "Control Spotify, WhatsApp, System Events", True),
+    ]
