@@ -206,8 +206,9 @@ class Speaker:
             audio = np.concatenate(chunks) if chunks else None
             if audio is None or not audio.size or bool(np.isnan(audio).any()) or float(np.abs(audio).max()) < 1e-4:
                 return False                          # known Kokoro-MLX NaN/silent bug -> AVSpeech fallback
-            peak = float(np.abs(audio).max())         # Kokoro renders quiet -> peak-normalize so talkback is fully
-            audio = (audio * (config.TTS_GAIN / peak)).astype("float32")   # audible at the system volume (was low)
+            rms = float(np.sqrt((audio ** 2).mean()))  # Kokoro renders ~-27 dBFS (far too quiet). LOUDNESS-normalize
+            if rms > 1e-4:                              # to a target RMS (peak-norm alone only reached ~-20 dBFS —
+                audio = np.clip(audio * (config.TTS_GAIN / rms), -1.0, 1.0).astype("float32")  # still quiet); clip the rare peak.
             path = tempfile.mktemp(suffix=".wav")
             sf.write(path, audio, 24000)
             self._proc = subprocess.Popen(["afplay", path])

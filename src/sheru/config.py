@@ -116,8 +116,9 @@ TTS_BACKEND = os.environ.get("SHERU_TTS") or _P.get("tts_backend") or "avspeech"
 KOKORO_MODEL = os.environ.get("SHERU_KOKORO", "mlx-community/Kokoro-82M-bf16")
 KOKORO_VOICE = os.environ.get("SHERU_KOKORO_VOICE") or _P.get("kokoro_voice") or "am_michael"   # male US; Hindi: hm_omega / hf_alpha
 KOKORO_SPEED = float(os.environ.get("SHERU_KOKORO_SPEED", "1.0"))
-# Kokoro renders quiet (~0.3 peak); peak-normalize each utterance to this so talkback is audible at system volume.
-TTS_GAIN = float(os.environ.get("SHERU_TTS_GAIN", "0.97"))
+# Kokoro renders quiet (~-27 dBFS); loudness-normalize each utterance to this TARGET RMS so talkback is properly
+# loud at system volume. 0.20 ≈ -14 dBFS (broadcast level); raise toward 0.25 for louder, lower for softer.
+TTS_GAIN = float(os.environ.get("SHERU_TTS_GAIN", "0.20"))
 # Curated LOCAL (Kokoro) voices for the menu picker — every id verified present + synthesizing in Kokoro-82M. (id, label)
 KOKORO_VOICES = [
     ("am_michael", "Michael — US male"),
