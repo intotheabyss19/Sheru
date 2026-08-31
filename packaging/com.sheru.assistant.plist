@@ -24,6 +24,12 @@
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key><string>/Users/yash/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <!-- launchd sets no locale, so Python defaults to ASCII and any subprocess output with a non-ASCII byte
+         (e.g. a Spotify track name, an AppleScript error with a smart quote) crashes with UnicodeDecodeError.
+         Force UTF-8 everywhere. -->
+    <key>PYTHONUTF8</key><string>1</string>
+    <key>LANG</key><string>en_US.UTF-8</string>
+    <key>LC_ALL</key><string>en_US.UTF-8</string>
   </dict>
 </dict>
 </plist>

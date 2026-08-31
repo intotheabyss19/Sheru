@@ -110,6 +110,7 @@ class Router:
         (re.compile(r"^(?:play|put on|start)\s+(.+?)\s+on\s+(?:you ?tube|yt)\b.*$"), "youtube"),
         (re.compile(r"^(?:you ?tube|yt)\s+(.+)$"), "youtube"),
         (re.compile(r"^(?:play|put on|start)\s+(.+?)\s+(?:on|in)\s+(?:the\s+)?(?:browser|web|zen|brave)$"), "youtube"),
+        (re.compile(r"^(?:play|put on|watch|show me|open)\s+(?:the\s+)?(?:latest\s+|newest\s+|recent\s+|last\s+)?(?:video|upload|episode)s?\s+(?:from|by|of|on)\s+(.+?)(?:\s+on\s+you\s?tube)?$|^(?:play|put on|watch)\s+(.+?)'?s\s+(?:latest\s+|newest\s+)?(?:video|upload|episode)s?$"), "youtube_ch"),
         (re.compile(r"^(?:message|dm|text|write to)\s+(.+?)\s+on\s+linked ?in(?:\s+(?:that|saying|to say)\s+(.+))?$"), "linkedin"),
         (re.compile(r"^(?:open|check|show me|go to)\s+(?:my\s+)?(?:g ?mail|email|inbox)\b.*$"), "gmail_open"),
         (re.compile(r"^(?:email|e-?mail|send an email to|compose an email to)\s+(.+?)(?:\s+(?:that|saying|to say|about)\s+(.+))?$"), "gmail_compose"),
@@ -310,6 +311,9 @@ class Router:
                           else f"I couldn't find a tutorial on {q}.", followup=True)
         if kind == "youtube":
             return Result(browser_agent.play_youtube(next((x for x in g if x), "").strip()), followup=True)
+        if kind == "youtube_ch":                   # "play the latest video from <channel>" -> a REAL scraped video, not a hallucinated ID
+            ch = next((x for x in g if x), "").strip()
+            return Result(browser_agent.play_youtube(f"{ch} latest video"), tool="youtube", followup=True)
         if kind == "yt_music":
             return Result(browser_agent.play_music(g[0].strip()), followup=True)
         if kind == "define":

@@ -87,7 +87,7 @@ def _play_uri(uri: str, label: str) -> str:
         out = subprocess.run(
             ["osascript", "-e",
              'tell application "Spotify" to (id of current track) & "|" & (player state as string)'],
-            capture_output=True, text=True).stdout.strip()
+            capture_output=True, text=True, encoding="utf-8", errors="replace").stdout.strip()
         cur_id, _, state = out.partition("|")
         if tid in cur_id:                                         # our track is the current one
             if state != "playing":
