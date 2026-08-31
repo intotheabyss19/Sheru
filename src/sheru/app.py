@@ -902,20 +902,22 @@ class Sheru:
         threading.Thread(target=_go, name="sheru-search", daemon=True).start()
 
     def _listen_cue(self) -> None:
-        """A soft, short tone signalling 'your turn — speak now' when the mic opens — so you know it's listening
-        without watching the screen. Quiet + brief so it doesn't get recorded as speech."""
+        """A short, bright tone signalling 'your turn — speak now' when the mic opens — audible across the room,
+        eyes-free. Pitched UP (-r 1.5) and loud (-v 0.9); -q 1 keeps the pitch-shift clean. AEC cancels it from
+        the mic so it isn't recorded as speech."""
         try:
             import subprocess
-            subprocess.Popen(["afplay", "-v", "0.3", "/System/Library/Sounds/Pop.aiff"])
+            subprocess.Popen(["afplay", "-v", "0.9", "-r", "1.5", "-q", "1", "/System/Library/Sounds/Pop.aiff"])
         except Exception:
             pass
 
     def _speak_cue(self) -> None:
-        """A soft, DISTINCT tone right before Sheru starts replying — 'I'm about to speak'. Different sound from the
-        listen cue (Tink vs Pop) so the two are unmistakable eyes-free: Pop = your turn, Tink = my turn."""
+        """A bright, DISTINCT tone right before Sheru starts replying — 'my turn'. Different base sound from the
+        listen cue (Tink vs Pop), also loud + pitched up, so the two are unmistakable eyes-free: Pop = your turn,
+        Tink = my turn."""
         try:
             import subprocess
-            subprocess.Popen(["afplay", "-v", "0.25", "/System/Library/Sounds/Tink.aiff"])
+            subprocess.Popen(["afplay", "-v", "0.9", "-r", "1.5", "-q", "1", "/System/Library/Sounds/Tink.aiff"])
         except Exception:
             pass
 
