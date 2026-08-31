@@ -193,6 +193,20 @@ class Speaker:
             self._kokoro = mlx_pool.run(load_model, config.KOKORO_MODEL)
         return self._kokoro
 
+    def warm_tts(self) -> None:
+        """Pre-build the Kokoro g2p pipeline at startup. The FIRST synth otherwise pays a ~3 s one-time
+        pipeline-creation cost, which shows up as a long gap before Sheru's first reply. Synthesizes a dummy
+        (discarded, never played) so the first real reply speaks immediately."""
+        if config.TTS_BACKEND != "kokoro":
+            return
+        try:
+            from . import mlx_pool
+            m = self._ensure_kokoro()
+            mlx_pool.run(lambda: [r.audio for r in m.generate(
+                text="ready", voice=config.KOKORO_VOICE, speed=config.KOKORO_SPEED)])
+        except Exception:
+            pass
+
     def _speak_kokoro(self, text: str) -> bool:
         """Generate with Kokoro-82M, play via afplay (reusing the subprocess path). False on any failure/NaN
         so speak() falls back to AVSpeech and the user still hears something."""

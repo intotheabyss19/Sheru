@@ -608,11 +608,12 @@ class Sheru:
                 log.info("ptt gate: waiting for speaker/claude/search to finish (busy=%s speaking=%s search=%s)",
                          self.claude.busy, self.speaker.speaking, self._search_busy)
                 while (self.claude.busy or self.speaker.speaking or self._search_busy) and time.monotonic() < t_end:
-                    time.sleep(0.1)
-                time.sleep(0.6)                            # let a just-arrived FINAL sentence begin playing…
+                    time.sleep(0.05)
+                time.sleep(0.12)                           # brief bridge so a just-queued streamed sentence flips speaking=True
                 while (self.claude.busy or self.speaker.speaking or self._search_busy) and time.monotonic() < t_end:
-                    time.sleep(0.1)                        # …then wait that out too
-                time.sleep(0.35)                           # echo guard: let the audio tail clear the mic buffer
+                    time.sleep(0.05)                       # …then wait that out too
+                # (echo-guard sleep removed: VP AEC cancels Sheru's own tail from the mic, and capture_once drains
+                #  the queue on open — so the mic can re-open the instant speech ends, no dead time before your reply)
                 if time.monotonic() >= t_end:
                     log.warning("ptt gate: hit the 175s cap — speaker/claude/search never cleared")
                 # re-listen only when a follow-up is expected: a draft awaiting confirm, or a reply that armed one.
@@ -1006,7 +1007,8 @@ class Sheru:
         if self.llm:
             self.llm.load()
         self.stt.transcribe(__import__("numpy").zeros(16000, dtype="float32"))  # loads parakeet
-        log.info("models warm in %.1fs (tts voice: %s)", time.perf_counter() - t0, self.speaker.voice_name)
+        self.speaker.warm_tts()                        # pre-build Kokoro's pipeline (first synth is ~3s) so the
+        log.info("models warm in %.1fs (tts voice: %s)", time.perf_counter() - t0, self.speaker.voice_name)  # first reply is instant
         try:                                       # raw-mic fallback only: a hot mic (>75%) CLIPS -> Whisper gibberish.
             from . import avcapture                 # with Voice-Processing I/O active, its AGC handles level — leave gain alone.
             if not avcapture.available():
