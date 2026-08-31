@@ -1456,6 +1456,24 @@ def run_menubar(app: Sheru) -> None:
     sheru_app.run()
 
 
+def _launch_sheru() -> int:
+    """Start the Sheru menu-bar app WITHOUT activating it — the 'F5 when Sheru is off' behaviour. kickstart if the
+    LaunchAgent is loaded but stopped (menu ▸ Quit), else bootstrap it (fully unloaded). Posts a notification so
+    the user knows it's coming; once the menu-bar icon appears they press F5 again to talk. Never starts listening."""
+    import os
+    import subprocess
+    uid = os.getuid()
+    plist = os.path.expanduser("~/Library/LaunchAgents/com.sheru.assistant.plist")
+    r = subprocess.run(["launchctl", "kickstart", f"gui/{uid}/com.sheru.assistant"], capture_output=True, text=True)
+    if r.returncode != 0:                       # agent not loaded -> load it (RunAtLoad starts it)
+        subprocess.run(["launchctl", "bootstrap", f"gui/{uid}", plist], capture_output=True)
+    subprocess.run(["osascript", "-e",
+                    'display notification "Warming up — I\'ll be in your menu bar in a moment, then press F5 to '
+                    'talk." with title "Sheru is launching…" sound name "Tink"'], capture_output=True)
+    print("Sheru is launching…")
+    return 0
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="sheru")
     p.add_argument("command", nargs="?", help="'setup' (first-run wizard) or 'trigger' (activate a running Sheru)")
@@ -1485,7 +1503,7 @@ def main(argv=None) -> int:
             c.close()
             return 0
         except OSError:
-            print("Sheru isn't running."); return 1
+            return _launch_sheru()   # Sheru is off -> LAUNCH it (don't activate); notify so the user knows it's coming
     # single-instance guard: if a Sheru is already running (its trigger socket accepts a connection), just ACTIVATE
     # it and exit — don't start a duplicate that fights over the mic + hotkey (looked like a crash / 'won't restart').
     if not a.text and not a.listen:
