@@ -38,14 +38,21 @@ def resolve_contact(name: str) -> dict | None:
     Contacts needed), then macOS Contacts as a silent fallback for numbers already synced there.
     Exact match first; on a miss, fuzzy-match the spoken name (STT drops letters)."""
     from . import contacts_book
-    own = contacts_book.get(name)
+    own = contacts_book.get(name)          # Sheru's own book (exact + fuzzy) — fast, reliable, no osascript
     if own:
         return own
-    hit = _lookup_by_name(name)
-    if hit:
-        return hit
-    best = _fuzzy_name(name, _all_names())
-    return _lookup_by_name(best) if best else None
+    # Fall back to macOS Contacts, but NEVER let it crash the send/call: it can hang under the LaunchAgent
+    # (osascript to Contacts blocking) and a raised timeout used to kill the whole flow with "something went wrong".
+    try:
+        hit = _lookup_by_name(name)
+        if hit:
+            return hit
+        best = _fuzzy_name(name, _all_names())
+        return _lookup_by_name(best) if best else None
+    except Exception as e:
+        import logging
+        logging.getLogger("sheru").info("resolve_contact: macOS Contacts fallback unavailable (%s) — %r not found", e, name)
+        return None
 
 
 def _fuzzy_name(query: str, names: list[str], cutoff: int = 82) -> str | None:
@@ -119,6 +126,8 @@ def send_whatsapp(handle: str, text: str, dry_run: bool = False) -> bool:
     """Open the WhatsApp chat pre-filled, then press Return to send. Returns True only if the send fired.
     Safety: presses Return ONLY while WhatsApp is confirmed frontmost, so it can't send into the wrong window.
     On any doubt returns False with the chat left pre-filled for a manual Return."""
+    import logging
+    log = logging.getLogger("sheru")
     digits = re.sub(r"\D", "", handle)
     url = f"whatsapp://send?phone={digits}&text={quote(text)}"
     if dry_run:
@@ -129,23 +138,32 @@ def send_whatsapp(handle: str, text: str, dry_run: bool = False) -> bool:
         if _frontmost() == "WhatsApp":
             break
     else:
+        log.info("send_whatsapp: WhatsApp never came to the front (frontmost=%r) — left pre-filled", _frontmost())
         return False                          # never became frontmost — don't risk sending elsewhere
     time.sleep(1.3)                           # navigating to a fresh chat + focusing the box takes ~1 s
     if _frontmost() != "WhatsApp":            # re-verify immediately before the keypress
+        log.info("send_whatsapp: WhatsApp lost focus before the keypress — left pre-filled")
         return False
     subprocess.run(["osascript", "-e", 'tell application "WhatsApp" to activate'], capture_output=True)
-    _osa('tell application "System Events" to key code 36')          # Return -> send
+    r = _osa('tell application "System Events" to key code 36')      # Return -> send
+    if r.returncode != 0:                     # Accessibility/Automation refused the keystroke
+        log.info("send_whatsapp: Return keystroke failed rc=%d err=%r — left pre-filled",
+                 r.returncode, (r.stderr or "").strip()[-160:])
+        return False
     time.sleep(0.6)
     if _frontmost() == "WhatsApp":            # backup Return (harmless no-op if the first already sent)
         _osa('tell application "System Events" to key code 36')
+    log.info("send_whatsapp: pressed Return to send to %s", digits)
     return True
 
 
 def call_whatsapp(handle: str, video: bool = False, dry_run: bool = False) -> bool:
-    """Open the contact's WhatsApp chat, then place a call via WhatsApp's own Call ▸ Voice/Video Call menu item.
-    The Call menu only exposes 'Voice Call'/'Video Call' once a chat is OPEN and loaded, so we POLL for it (up to
-    ~6 s) instead of a fixed wait, then click it. Robust — no coordinate-clicking. dry_run opens the chat and
-    stops WITHOUT calling. Returns True only if the call item was found + clicked."""
+    """Open the contact's WhatsApp chat, then place the call by AXPress-ing the 'Start voice/video call' BUTTON in
+    the chat header. (Recent WhatsApp moved this OFF the menu bar — its 'Call' menu now only holds in-call controls
+    like Mute/End Call, which is why the old menu-item approach returned 'notfound'.) The confirm-first flow upstream
+    means this is only reached after the user says yes. dry_run opens the chat and stops WITHOUT calling."""
+    import logging
+    log = logging.getLogger("sheru")
     digits = re.sub(r"\D", "", handle)
     subprocess.run(["open", f"whatsapp://send?phone={digits}"], check=False)
     for _ in range(40):                        # wait up to ~8 s for WhatsApp to come forward on that chat
@@ -153,36 +171,29 @@ def call_whatsapp(handle: str, video: bool = False, dry_run: bool = False) -> bo
         if _frontmost() == "WhatsApp":
             break
     else:
-        import logging
-        logging.getLogger("sheru").info("call_whatsapp: WhatsApp didn't come to the front (frontmost=%r)",
-                                        _frontmost())
+        log.info("call_whatsapp: WhatsApp didn't come to the front (frontmost=%r)", _frontmost())
         return False
     if dry_run:                                # verified up to the call — never actually rings
         return True
-    item = "Video Call" if video else "Voice Call"     # menu titles carry a U+200E prefix -> match by 'contains'
-    # poll INSIDE AppleScript: wait for the chat to load + the Call menu to expose the enabled item, then click it
-    script = f'''tell application "System Events" to tell process "WhatsApp"
-        set callMenu to menu 1 of (first menu bar item of menu bar 1 whose name contains "Call")
-        repeat 30 times
-            try
-                set theItem to (first menu item of callMenu whose name contains "{item}")
-                if enabled of theItem then
-                    click theItem
-                    return "ok"
-                end if
-            end try
-            delay 0.2
-        end repeat
-        return "notfound"
-    end tell'''
-    r = subprocess.run(["osascript", "-e", script], capture_output=True, text=True,
-                       encoding="utf-8", errors="replace")   # the menu item name has a U+200E prefix
-    ok = "ok" in (r.stdout or "")
-    if not ok:                                 # log WHY: no "Call" menu bar item (AppleScript error) vs item not enabled
-        import logging
-        logging.getLogger("sheru").info("call_whatsapp: '%s' not clicked — stdout=%r stderr=%r",
-                                        item, (r.stdout or "").strip(), (r.stderr or "").strip()[-200:])
-    return ok
+    label = "Start %s call" % ("video" if video else "voice")
+    try:
+        from .. import ax
+        if not ax.available():
+            log.info("call_whatsapp: Accessibility not granted — can't press the call button")
+            return False
+        time.sleep(1.0)                        # let the chat + its header call buttons load
+        matched = ""
+        for _ in range(8):                     # poll ~8s for the button to appear, then AXPress it
+            ok, matched = ax.click_by_label(label, cutoff=76)
+            if ok:
+                log.info("call_whatsapp: pressed %r", matched)
+                return True
+            time.sleep(0.5)
+        log.info("call_whatsapp: %r button not found (last=%r)", label, matched)
+        return False
+    except Exception as e:
+        log.info("call_whatsapp: ax click failed: %s", e)
+        return False
 
 
 def prefill(handle: str, text: str, app: str = "messages", dry_run: bool = False) -> str:
