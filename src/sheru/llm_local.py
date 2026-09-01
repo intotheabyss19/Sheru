@@ -101,3 +101,14 @@ class LocalLLM:
         with self._lock:
             out = mlx_pool.run(generate, self._model, self._tok, prompt=prompt, max_tokens=220, verbose=False)
         return re.sub(r"<think>.*?</think>", "", out, flags=re.S).strip() or "I'm not sure."
+
+    def freeform(self, system: str, user: str, max_tokens: int = 90) -> str:
+        """One-off generation with a CUSTOM system prompt (not the assistant persona) — for battle mode etc."""
+        from mlx_lm import generate
+        from . import mlx_pool
+        self.load()
+        msgs = [{"role": "system", "content": system}, {"role": "user", "content": user}]
+        prompt = self._tok.apply_chat_template(msgs, add_generation_prompt=True, enable_thinking=False)
+        with self._lock:
+            out = mlx_pool.run(generate, self._model, self._tok, prompt=prompt, max_tokens=max_tokens, verbose=False)
+        return re.sub(r"<think>.*?</think>", "", out, flags=re.S).strip()

@@ -59,6 +59,7 @@ class Result:
     call: dict | None = None      # {recipient, video, app} -> app starts a CALL confirm flow (never auto-dials)
     open_panel: bool = False      # ask the app to reveal the chat panel (for input impractical by voice, e.g. a link)
     typing: dict | None = None    # {on, recipient, app} -> app enters TYPING mode (speak -> type into the active field)
+    battle: dict | None = None    # {sheru_starts, opponent} -> app starts a VOICE-DUEL against another agent
     resolve_song: str | None = None  # query the app should resolve via Claude, then play
     played: str | None = None        # the song query just played (so "no, wrong song" can re-resolve)
     feedback: str | None = None      # explicit good/bad rating on the PREVIOUS action (judges Sheru's workings)
@@ -94,6 +95,10 @@ class Router:
                     r"nothing\s+else|that'?s\s+everything|leave\s+it|shush)"
                     r"[,.\s]*(?:now|please|for\s+now|then|sheru)?[.!\s]*$"), "end_convo"),
         (re.compile(r"^(?:stop|cancel|never ?mind|shut up|quiet|enough)\b(?!\s+(?:do not disturb|dnd|focus))|^that'?s enough\b|^okay,? that'?s enough\b"), "stop"),
+        # AGENT BATTLE — a 20-question voice duel vs another AI agent (battle.py). Announce who starts in the command.
+        (re.compile(r"^(?:ok(?:ay)?|alright|yo)?[,\s]*(?:let'?s\s+)?(?:start|begin|kick\s*off|initiate|do|start\s*off)\s+"
+                    r"(?:the\s+|our\s+|a\s+|an\s+|this\s+)?(?:agent[\s-]*|voice[\s-]*|ai[\s-]*|20[\s-]?question\s+)?"
+                    r"(?:battle|duel|showdown|face[\s-]?off)\b(.*)$|^(?:battle|duel)\s+mode\b(.*)$"), "battle"),
         # TYPING / dictation mode — speak and Sheru types it into the active field (before the generic 'open' rule)
         (re.compile(r"^(?:open|go to|pull up|start)\s+(.+?)(?:'?s)?\s+(?:chat|conversation|whats\s?app|messages?)\s+and\s+(?:then\s+)?(?:activate|enable|start|turn on|begin|go into)\s+(?:the\s+)?(?:typing|dictation|type|hands\s?free)\s+mode$"), "typing_open"),
         (re.compile(r"^(?:activate|enable|start|turn on|begin|go into|switch to)\s+(?:the\s+)?(?:typing|dictation|type|hands\s?free)\s+mode$"), "typing_on"),
@@ -265,6 +270,15 @@ class Router:
             return Result("", typing={"on": True, "recipient": g[0].strip(), "app": "whatsapp"})
         if kind == "typing_on":
             return Result("", typing={"on": True, "recipient": None, "app": None})
+        if kind == "battle":
+            tail = (m.group(0) or "").lower()
+            # default: Sheru starts. The user announces who begins — flip if they hand the first move to the opponent.
+            opp_first = bool(re.search(r"\b(arya|gaurav|she|he|they|opponent|other)\b[^.]*\b(start|starts|go|goes|first|begin|begins|kick)\b", tail)
+                             or re.search(r"\b(let|have|allow)\s+(arya|gaurav|him|her|them)\b", tail)
+                             or re.search(r"\byou\s+(listen|wait|answer\s+first|go\s+second)\b", tail))
+            sheru_starts = not opp_first
+            ack = ("Arya's up first — I'm listening." if opp_first else "I'll kick it off.")
+            return Result(f"Duel on. {ack}", battle={"sheru_starts": sheru_starts, "opponent": "Arya"}, tool="battle")
         if kind == "feedback_good":
             strong = bool(re.search(r"\bvery\b|\bperfect\b|\bexcellent\b|\bawesome\b", m.group(0)))
             return Result("Awesome, thanks!" if strong else "Thanks!", feedback="positive-strong" if strong else "positive")

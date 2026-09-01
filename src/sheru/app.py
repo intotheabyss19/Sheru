@@ -135,6 +135,8 @@ class Sheru:
             return self._start_call(res.call, sink)
         if getattr(res, "typing", None):
             return self._start_typing(res.typing, sink)
+        if getattr(res, "battle", None):
+            return self._start_battle(res.battle, sink)
         if getattr(res, "search", None):
             if res.speech:
                 sink(res.speech)                 # "Let me check." ack
@@ -325,6 +327,21 @@ class Sheru:
             sink("I opened the chat but couldn't start the call — tap the call button in WhatsApp to connect.")
             return "call-failed"
         return "calling"
+
+    def _start_battle(self, d: dict, sink) -> str:
+        """Kick off a 20-question voice duel against another agent. Ends this push-to-talk turn (frees the mic);
+        the battle thread waits for that, then takes over the speak↔listen loop. Say 'stop' to end it."""
+        if self.llm is None:
+            msg = "I'd need my local model for a duel — it's off right now."
+            sink(msg)
+            return msg
+        from . import battle
+        sheru_starts = d.get("sheru_starts", True)
+        ack = "Duel on. " + ("Arya's up first — I'm listening." if not sheru_starts else "I'll kick it off.")
+        sink(ack)
+        self._ended_convo = True                 # end this PTT turn so the mic is released; the battle thread waits for it
+        battle.start(self, sheru_starts=sheru_starts, opponent=d.get("opponent", "Arya"))
+        return ack
 
     def _start_typing(self, t: dict, sink) -> str:
         """Enter hands-free TYPING mode: from now on spoken words get typed into the focused field.
