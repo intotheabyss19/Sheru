@@ -25,7 +25,8 @@ def _noop(*a, **k):
 shortcuts.run_shortcut = lambda *a, **k: None          # no shortcut exists in tests -> graceful "create it" path
 shortcuts.list_shortcuts = lambda *a, **k: []
 from sheru.actions import screen
-screen.read_screen = lambda *a, **k: "Inbox · 3 unread · Reply"   # don't screenshot during tests
+screen.read_screen = lambda *a, **k: "Inbox · 3 unread · Reply"          # don't screenshot during tests
+screen.understand_screen = lambda *a, **k: "Inbox · 3 unread · Reply"    # the VLM path too — NEVER screencapture in tests
 web.site_search = lambda q, sites: f"Searching {' and '.join(s.title() for s in sites)} for {q}."   # don't open browsers
 
 

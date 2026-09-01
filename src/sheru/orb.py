@@ -71,13 +71,19 @@ class _OrbView(NSView):
     @objc.python_method
     def apply_level(self, v):
         # single source of scale (no CA-animation override, which was hiding the voice): a gentle idle breathe
-        # PLUS live amplitude, recomputed every frame so it actually reacts to your voice.
-        idle = 0.05 * (0.5 + 0.5 * math.sin(time.monotonic() * 3.0))
+        # PLUS live amplitude, recomputed every frame so it actually reacts to your voice. While SHERU is speaking
+        # (its turn) the breathe is faster + deeper, so the orb visibly "talks" vs. the calm listening breathe.
+        spk = getattr(self, "_speaking", False)
+        idle = (0.11 if spk else 0.05) * (0.5 + 0.5 * math.sin(time.monotonic() * (6.0 if spk else 3.0)))
         s = 1.0 + idle + 0.55 * max(0.0, min(1.0, v))         # swell kept within the flush corner window
         CATransaction.begin()
         CATransaction.setDisableActions_(True)
         self._orb.setTransform_(_scale(s))
         CATransaction.commit()
+
+    @objc.python_method
+    def set_speaking(self, on):
+        self._speaking = bool(on)
 
     @objc.python_method
     def set_state(self, state):                              # local (orange) vs claude (blue)
@@ -169,6 +175,15 @@ class ListeningOrb(NSObject):
                 v.set_state(state)
         AppHelper.callAfter(do)
 
+    @objc.python_method
+    def set_speaking(self, on):
+        """Visual turn cue: True while Sheru is REPLYING (its turn), False while listening (your turn)."""
+        def do():
+            v = getattr(self, "_view", None)
+            if v is not None and hasattr(v, "set_speaking"):
+                v.set_speaking(on)
+        AppHelper.callAfter(do)
+
 
 # ---- approach D: audio-reactive particle swirl (CAEmitterLayer) ----------------------------------------------
 def _dot_image(d: int = 48):
@@ -224,11 +239,17 @@ class _ParticleView(NSView):
     @objc.python_method
     def apply_level(self, v):
         v = max(0.0, min(1.0, v))
+        if getattr(self, "_speaking", False):                # Sheru's turn: a lively 'talking' baseline burst
+            v = max(v, 0.35 + 0.30 * (0.5 + 0.5 * math.sin(time.monotonic() * 8.0)))
         CATransaction.begin()
         CATransaction.setDisableActions_(True)
         self._em.setBirthRate_(0.3 + 2.4 * v)                # burst more particles as you speak…
         self._em.setVelocity_(0.6 + 1.5 * v)                 # …and throw them out faster
         CATransaction.commit()
+
+    @objc.python_method
+    def set_speaking(self, on):
+        self._speaking = bool(on)
 
     @objc.python_method
     def set_state(self, state):                              # local (orange) vs claude (blue)
@@ -273,8 +294,14 @@ class _RingsView(NSView):
         return self
 
     @objc.python_method
+    def set_speaking(self, on):
+        self._speaking = bool(on)
+
+    @objc.python_method
     def apply_level(self, v):
         v = max(0.0, min(1.0, v))
+        if getattr(self, "_speaking", False):                    # Sheru's turn: ripple + glow on a 'talking' baseline
+            v = max(v, 0.35 + 0.30 * (0.5 + 0.5 * math.sin(time.monotonic() * 8.0)))
         self._phase = (self._phase + 0.010 + 0.055 * v) % 1.0     # ripple faster as you speak
         n = len(self._rings)
         CATransaction.begin()
@@ -323,8 +350,14 @@ class _BarsView(NSView):
         return self
 
     @objc.python_method
+    def set_speaking(self, on):
+        self._speaking = bool(on)
+
+    @objc.python_method
     def apply_level(self, v):
         v = max(0.0, min(1.0, v))
+        if getattr(self, "_speaking", False):                # Sheru's turn: bars dance on a 'talking' baseline
+            v = max(v, 0.4)
         t = time.monotonic()
         cy = WIN / 2
         CATransaction.begin()
@@ -374,12 +407,104 @@ def _mic_sampler():
         print("mic sampler off:", e)
 
 
-STYLES = ("orb", "particles", "rings", "bars")
+def _fib_sphere(n):
+    """n points spread ~evenly over a unit sphere (Fibonacci lattice)."""
+    pts = []
+    ga = math.pi * (3.0 - math.sqrt(5.0))
+    for i in range(n):
+        y = 1.0 - (i / (n - 1.0)) * 2.0
+        r = math.sqrt(max(0.0, 1.0 - y * y))
+        th = ga * i
+        pts.append((math.cos(th) * r, y, math.sin(th) * r))
+    return pts
+
+
+# ---- globe: a rotating sphere of dots (Google/Siri assistant style) ------------------------------------------
+class _GlobeView(NSView):
+    """A slowly rotating globe of dots. Most dots take the state colour (orange = local, blue = claude); a sprinkle
+    are bright/accent for the shimmer. Reacts to the mic level; rotates faster and pulses when Sheru is speaking."""
+
+    def initWithFrame_click_(self, frame, on_click):
+        self = objc.super(_GlobeView, self).initWithFrame_(frame)
+        if self is None:
+            return None
+        self._on_click = on_click
+        self.setWantsLayer_(True)
+        self._pts = _fib_sphere(150)
+        self._angle = 0.0
+        self._level = 0.0
+        self._speaking = False
+        self._phase = 0.0
+        self._base = _STATE["local"]
+        self._cols = self._make_cols()
+        self._R = WIN * 0.34
+        return self
+
+    @objc.python_method
+    def _make_cols(self):
+        import random
+        r, g, b = self._base
+        rnd, cols = random.Random(7), []
+        for _ in self._pts:
+            t = rnd.random()
+            if t < 0.16:                                    # bright / near-white accent
+                cols.append((min(1.0, r + 0.5), min(1.0, g + 0.5), min(1.0, b + 0.5)))
+            elif t < 0.30:                                  # complementary accent (gold on blue, cyan on orange)
+                cols.append((g, b, r) if b > r else (b, r, g))
+            else:
+                cols.append((r, g, b))
+        return cols
+
+    @objc.python_method
+    def apply_level(self, v):
+        self._level = 0.6 * self._level + 0.4 * max(0.0, min(1.0, v))
+        self._angle += (0.045 if self._speaking else 0.016) + 0.05 * self._level   # faster when speaking
+        self._phase += 0.28
+        self.setNeedsDisplay_(True)
+
+    @objc.python_method
+    def set_state(self, state):
+        self._base = _STATE.get(state, _STATE["local"])
+        self._cols = self._make_cols()
+        self.setNeedsDisplay_(True)
+
+    @objc.python_method
+    def set_speaking(self, on):
+        self._speaking = bool(on)
+
+    def drawRect_(self, rect):
+        from AppKit import NSBezierPath, NSColor
+        cx, cy = WIN / 2.0, WIN / 2.0
+        pulse = (0.5 + 0.5 * math.sin(self._phase)) if self._speaking else 0.0
+        R = self._R * (1.0 + 0.10 * self._level + 0.05 * pulse)
+        ca, sa = math.cos(self._angle), math.sin(self._angle)
+        order = sorted(range(len(self._pts)), key=lambda i: self._pts[i][0] * sa + self._pts[i][2] * ca)  # back->front
+        for i in order:
+            x, y, z = self._pts[i]
+            xr = x * ca - z * sa
+            zr = x * sa + z * ca
+            sx, sy = cx + xr * R, cy + y * R
+            depth = (zr + 1.0) / 2.0                         # 0 back .. 1 front
+            size = 0.8 + 1.7 * depth + 1.6 * self._level
+            a = 0.16 + 0.64 * depth
+            if self._speaking:
+                a = min(1.0, a * (1.0 + 0.5 * pulse))
+            cr, cg, cb = self._cols[i]
+            NSColor.colorWithSRGBRed_green_blue_alpha_(cr, cg, cb, a).set()
+            NSBezierPath.bezierPathWithOvalInRect_(NSMakeRect(sx - size, sy - size, 2 * size, 2 * size)).fill()
+
+    def mouseDown_(self, event):
+        if self._on_click:
+            self._on_click()
+
+
+STYLES = ("orb", "particles", "rings", "bars", "globe")
 
 
 def view_for(style: str):
     """Map a style name to its listening-animation NSView class (shared by the app + the preview)."""
-    return {"orb": _OrbView, "particles": _ParticleView, "rings": _RingsView, "bars": _BarsView}.get(style, _OrbView)
+    return {"orb": _OrbView, "particles": _ParticleView, "rings": _RingsView,
+            "bars": _BarsView, "globe": _GlobeView}.get(style, _OrbView)
 
 
 def main():

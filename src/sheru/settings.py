@@ -25,7 +25,8 @@ from . import config
 
 W = 560
 LANGS = [("auto", "Match what I speak"), ("en", "English"), ("hi", "Hindi / Hinglish")]
-ORBS = [("orb", "Orb (lightest)"), ("particles", "Particles"), ("rings", "Rings"), ("bars", "Bars")]
+ORBS = [("orb", "Orb (lightest)"), ("globe", "Globe (dots)"), ("particles", "Particles"),
+        ("rings", "Rings"), ("bars", "Bars")]
 CUE_LABELS = [("chime", "Chime (bright)"), ("chime_high", "Chime (very high)"),
               ("soft", "Soft"), ("classic", "Classic")]
 
