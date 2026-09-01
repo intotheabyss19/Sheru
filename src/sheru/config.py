@@ -35,7 +35,7 @@ def update_profile(key: str, value) -> None:
     except Exception:
         d = {}
     d[key] = value
-    f.write_text(json.dumps(d, indent=2))
+    f.write_text(json.dumps(d, indent=2), encoding="utf-8")
     _P[key] = value
 
 

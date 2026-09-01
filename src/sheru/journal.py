@@ -79,7 +79,7 @@ class Journal:
             line = (f"{time.strftime('%H:%M:%S', time.localtime(ts))} [{mark}] "
                     f"IN: {utterance!r:.80}  ->  DID: [{action}] {detail[:90]}\n")
             with self._lock:
-                with open(Path(config.DATA_DIR) / "actions.log", "a") as f:
+                with open(Path(config.DATA_DIR) / "actions.log", "a", encoding="utf-8") as f:
                     f.write(line)
         except Exception:
             pass
@@ -100,5 +100,5 @@ class Journal:
         if note:
             entry["note"] = note
         with self._lock:
-            with open(JOURNAL, "a") as f:
+            with open(JOURNAL, "a", encoding="utf-8") as f:
                 f.write(json.dumps(entry, ensure_ascii=False) + "\n")

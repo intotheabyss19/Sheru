@@ -65,7 +65,7 @@ def _stars() -> set[int]:
 
 def _save_stars(ids: set[int]) -> None:
     STARS.parent.mkdir(parents=True, exist_ok=True)
-    STARS.write_text(json.dumps({"starred": sorted(ids)}))
+    STARS.write_text(json.dumps({"starred": sorted(ids)}), encoding="utf-8")
 
 
 def is_starred(sid: int) -> bool:
@@ -162,5 +162,5 @@ def prune(days: int = RETAIN_DAYS) -> int:
         else:
             removed += 1
     if removed:
-        JOURNAL.write_text("\n".join(kept) + ("\n" if kept else ""))
+        JOURNAL.write_text("\n".join(kept) + ("\n" if kept else ""), encoding="utf-8")
     return removed

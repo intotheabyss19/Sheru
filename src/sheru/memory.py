@@ -30,7 +30,7 @@ class Memory:
         item = {"text": text.strip(), "kind": kind, "ts": round(time.time(), 1)}
         with self._lock:
             self._items.append(item)
-            with open(STORE, "a") as f:
+            with open(STORE, "a", encoding="utf-8") as f:
                 f.write(json.dumps(item, ensure_ascii=False) + "\n")
         return "Got it, I'll remember that."
 

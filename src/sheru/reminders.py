@@ -75,7 +75,7 @@ def parse_when(text: str):
 
 def _persist(task, fire_ts):
     STORE.parent.mkdir(parents=True, exist_ok=True)
-    with open(STORE, "a") as f:
+    with open(STORE, "a", encoding="utf-8") as f:
         f.write(json.dumps({"task": task, "fire_ts": round(fire_ts, 1)}) + "\n")
 
 
@@ -100,5 +100,5 @@ def restore(on_fire) -> int:
         if r.get("fire_ts", 0) > now + 1:
             kept.append(r)
             schedule(r["task"], r["fire_ts"] - now, on_fire, persist=False)
-    STORE.write_text("\n".join(json.dumps(r) for r in kept) + ("\n" if kept else ""))
+    STORE.write_text("\n".join(json.dumps(r) for r in kept) + ("\n" if kept else ""), encoding="utf-8")
     return len(kept)

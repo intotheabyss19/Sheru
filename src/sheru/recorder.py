@@ -49,6 +49,6 @@ def save(audio: "np.ndarray", transcript: str, stt_latency: float = 0.0, kind: s
         "kind": kind,
         "routed": routed,
     }
-    with open(INDEX, "a") as f:
+    with open(INDEX, "a", encoding="utf-8") as f:
         f.write(json.dumps(rec, ensure_ascii=False) + "\n")
     return str(wav)

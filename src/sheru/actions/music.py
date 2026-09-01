@@ -144,7 +144,7 @@ def remember_playlist(name: str, link: str) -> str | None:
     d = _load_playlists()
     d[name.strip().lower()] = uri
     config.DATA_DIR.mkdir(parents=True, exist_ok=True)
-    _PLAYLISTS.write_text(json.dumps(d, ensure_ascii=False))
+    _PLAYLISTS.write_text(json.dumps(d, ensure_ascii=False), encoding="utf-8")
     return uri
 
 
