@@ -553,7 +553,7 @@ class Sheru:
                     log.info("ptt: follow-up window open %.0fs — say your next thing", wait)
                 self._listen_cue()                    # a soft 'your turn' tone (EVERY open, first + follow-up) so you
                 self._cued_speak = False              # know exactly when to speak; re-arm the 'about to speak' cue
-                self._set_orb_speaking(False)         # visual turn cue: animation back to calm 'listening'
+                self._set_orb_phase("listen")         # visual turn cue: animation back to calm 'listening' sphere
                 audio = capture_once(max_wait=wait, cfg=(None if first else fu_cfg))   # stricter on follow-ups
                 self._followup_armed = False              # consume; handle_text re-arms if this reply invites one
                 self._ended_convo = False                 # handle_text sets this True only on an explicit sign-off
@@ -592,6 +592,7 @@ class Sheru:
                 cmd = self.strip_wake(text)                # strip an optional wake word if still said
                 cmd = cmd if cmd else text
                 if cmd:
+                    self._set_orb_phase("process")         # you're done speaking -> 'processing' (accent dots appear)
                     if self.panel is not None:
                         self.panel.push_user(cmd)          # show what Sheru HEARD in the chat (so you catch STT errors)
                     try:
@@ -679,7 +680,7 @@ class Sheru:
         if not getattr(self, "_cued_speak", False):   # a soft, distinct 'Sheru is about to speak' tone before the
             self._cued_speak = True                    # reply's first sentence — so you know to stop and listen
             self._speak_cue()
-            self._set_orb_speaking(True)               # + the visual turn cue: animation switches to 'speaking'
+            self._set_orb_phase("reply")               # + the visual turn cue: animation switches to 'speaking'
         self.speaker.speak(text)
         if self.panel is not None:
             self.panel._append(text)
@@ -935,12 +936,13 @@ class Sheru:
         except Exception:
             pass
 
-    def _set_orb_speaking(self, on: bool) -> None:
-        """Visual turn cue on the animation: True while Sheru replies (its turn — active/pulsing), False while
-        listening (your turn — calm, reacts to your voice). Pairs with the sound cues; works in every style + mode."""
+    def _set_orb_phase(self, phase: str) -> None:
+        """Visual turn state on the animation: 'listen' (your turn — calm, reacts to your voice), 'process'
+        (thinking), 'reply' (Sheru speaking). The globe shows all three (dots→rim+waveform while you record,
+        accent dots on process/reply); other styles map to speaking = (phase != 'listen'). Pairs with the sound cues."""
         try:
             if getattr(self, "orb", None) is not None:
-                self.orb.set_speaking(on)
+                self.orb.set_phase(phase)
         except Exception:
             pass
 

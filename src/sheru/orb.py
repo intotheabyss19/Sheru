@@ -184,6 +184,20 @@ class ListeningOrb(NSObject):
                 v.set_speaking(on)
         AppHelper.callAfter(do)
 
+    @objc.python_method
+    def set_phase(self, phase):
+        """Finer turn state: 'listen' | 'process' | 'reply'. The globe uses all three; other styles fall back to
+        speaking = (phase != 'listen')."""
+        def do():
+            v = getattr(self, "_view", None)
+            if v is None:
+                return
+            if hasattr(v, "set_phase"):
+                v.set_phase(phase)
+            elif hasattr(v, "set_speaking"):
+                v.set_speaking(phase != "listen")
+        AppHelper.callAfter(do)
+
 
 # ---- approach D: audio-reactive particle swirl (CAEmitterLayer) ----------------------------------------------
 def _dot_image(d: int = 48):
@@ -419,10 +433,13 @@ def _fib_sphere(n):
     return pts
 
 
-# ---- globe: a rotating sphere of dots (Google/Siri assistant style) ------------------------------------------
+# ---- globe: a small rotating sphere of blue dots on a translucent disc, with recording + processing states ----
 class _GlobeView(NSView):
-    """A slowly rotating globe of dots. Most dots take the state colour (orange = local, blue = claude); a sprinkle
-    are bright/accent for the shimmer. Reacts to the mic level; rotates faster and pulses when Sheru is speaking."""
+    """Idle/listening: uneven blue dots as a slowly turning globe on a translucent-blue disc. While you SPEAK
+    (recording): the dots fly out to the rim and a waveform shows your audio. While Sheru PROCESSES/REPLIES:
+    accent dots appear alongside the blue — orange for local, sky-blue for Claude."""
+
+    _BLUE = (0.30, 0.60, 1.0)
 
     def initWithFrame_click_(self, frame, on_click):
         self = objc.super(_GlobeView, self).initWithFrame_(frame)
@@ -430,68 +447,95 @@ class _GlobeView(NSView):
             return None
         self._on_click = on_click
         self.setWantsLayer_(True)
-        self._pts = _fib_sphere(150)
+        import random
+        rnd = random.Random(11)
+        n = 110
+        # uneven sphere: Fibonacci points nudged by a little jitter so the dots aren't a perfect lattice
+        self._pts = []
+        for (x, y, z) in _fib_sphere(n):
+            x += (rnd.random() - 0.5) * 0.14
+            y += (rnd.random() - 0.5) * 0.14
+            z += (rnd.random() - 0.5) * 0.14
+            m = math.sqrt(x * x + y * y + z * z) or 1.0
+            self._pts.append((x / m, y / m, z / m))
+        self._sizes = [0.6 + rnd.random() * 1.2 for _ in range(n)]       # uneven dot sizes
+        self._accent_idx = {i for i in range(n) if rnd.random() < 0.42}  # which dots turn accent-coloured
         self._angle = 0.0
         self._level = 0.0
-        self._speaking = False
-        self._phase = 0.0
-        self._base = _STATE["local"]
-        self._cols = self._make_cols()
-        self._R = WIN * 0.34
+        self._rec = 0.0                 # recording morph (dots -> rim), driven by mic level
+        self._accent = 0.0              # accent-dot fade-in, driven by phase
+        self._phase = "listen"          # "listen" | "process" | "reply"
+        self._accent_rgb = (1.0, 0.60, 0.15)     # local orange / claude sky-blue
+        self._wave = [0.0] * 44         # rolling mic-level buffer for the waveform
+        self._R = WIN * 0.17            # 50% smaller than before
+        self._bgR = WIN * 0.30
         return self
 
     @objc.python_method
-    def _make_cols(self):
-        import random
-        r, g, b = self._base
-        rnd, cols = random.Random(7), []
-        for _ in self._pts:
-            t = rnd.random()
-            if t < 0.16:                                    # bright / near-white accent
-                cols.append((min(1.0, r + 0.5), min(1.0, g + 0.5), min(1.0, b + 0.5)))
-            elif t < 0.30:                                  # complementary accent (gold on blue, cyan on orange)
-                cols.append((g, b, r) if b > r else (b, r, g))
-            else:
-                cols.append((r, g, b))
-        return cols
-
-    @objc.python_method
     def apply_level(self, v):
-        self._level = 0.6 * self._level + 0.4 * max(0.0, min(1.0, v))
-        self._angle += (0.045 if self._speaking else 0.016) + 0.05 * self._level   # faster when speaking
-        self._phase += 0.28
+        v = max(0.0, min(1.0, v))
+        self._level = 0.5 * self._level + 0.5 * v
+        self._rec += ((1.0 if v > 0.14 else 0.0) - self._rec) * 0.14     # ramp recording up/down with your voice
+        self._accent += ((0.0 if self._phase == "listen" else 1.0) - self._accent) * 0.09
+        self._wave.append(v); self._wave.pop(0)
+        self._angle += 0.016 + 0.045 * self._level + (0.02 if self._phase == "reply" else 0.0)
         self.setNeedsDisplay_(True)
 
     @objc.python_method
     def set_state(self, state):
-        self._base = _STATE.get(state, _STATE["local"])
-        self._cols = self._make_cols()
+        self._accent_rgb = (0.45, 0.80, 1.0) if state == "claude" else (1.0, 0.60, 0.15)  # claude sky-blue / local orange
         self.setNeedsDisplay_(True)
 
     @objc.python_method
-    def set_speaking(self, on):
-        self._speaking = bool(on)
+    def set_phase(self, phase):
+        self._phase = phase if phase in ("listen", "process", "reply") else "listen"
+
+    @objc.python_method
+    def set_speaking(self, on):          # kept for the shared orb API; maps onto the phase
+        self._phase = "reply" if on else "listen"
 
     def drawRect_(self, rect):
         from AppKit import NSBezierPath, NSColor
         cx, cy = WIN / 2.0, WIN / 2.0
-        pulse = (0.5 + 0.5 * math.sin(self._phase)) if self._speaking else 0.0
-        R = self._R * (1.0 + 0.10 * self._level + 0.05 * pulse)
+        bgR, R = self._bgR, self._R
+        NSColor.colorWithSRGBRed_green_blue_alpha_(0.12, 0.32, 0.72, 0.16).set()   # translucent blue disc
+        NSBezierPath.bezierPathWithOvalInRect_(NSMakeRect(cx - bgR, cy - bgR, 2 * bgR, 2 * bgR)).fill()
+        if self._rec > 0.04:
+            self._draw_wave(cx, cy, bgR)
         ca, sa = math.cos(self._angle), math.sin(self._angle)
         order = sorted(range(len(self._pts)), key=lambda i: self._pts[i][0] * sa + self._pts[i][2] * ca)  # back->front
+        br, bg, bb = self._BLUE
+        ar, ag, ab = self._accent_rgb
         for i in order:
             x, y, z = self._pts[i]
             xr = x * ca - z * sa
             zr = x * sa + z * ca
-            sx, sy = cx + xr * R, cy + y * R
-            depth = (zr + 1.0) / 2.0                         # 0 back .. 1 front
-            size = 0.8 + 1.7 * depth + 1.6 * self._level
-            a = 0.16 + 0.64 * depth
-            if self._speaking:
-                a = min(1.0, a * (1.0 + 0.5 * pulse))
-            cr, cg, cb = self._cols[i]
-            NSColor.colorWithSRGBRed_green_blue_alpha_(cr, cg, cb, a).set()
-            NSBezierPath.bezierPathWithOvalInRect_(NSMakeRect(sx - size, sy - size, 2 * size, 2 * size)).fill()
+            depth = (zr + 1.0) / 2.0
+            px, py = cx + xr * R, cy + y * R
+            if self._rec > 0.01:                            # fly out to the rim as you speak
+                dx, dy = px - cx, py - cy
+                dl = math.hypot(dx, dy) or 1.0
+                px += (cx + dx / dl * bgR * 0.9 - px) * self._rec
+                py += (cy + dy / dl * bgR * 0.9 - py) * self._rec
+            size = self._sizes[i] * (0.7 + 0.8 * depth) + 0.8 * self._level
+            if i in self._accent_idx and self._accent > 0.02:
+                r, g, b, a = ar, ag, ab, (0.2 + 0.6 * depth) * self._accent
+            else:
+                r, g, b, a = br, bg, bb, (0.16 + 0.6 * depth)
+            NSColor.colorWithSRGBRed_green_blue_alpha_(r, g, b, a).set()
+            NSBezierPath.bezierPathWithOvalInRect_(NSMakeRect(px - size, py - size, 2 * size, 2 * size)).fill()
+
+    @objc.python_method
+    def _draw_wave(self, cx, cy, bgR):
+        from AppKit import NSBezierPath, NSColor
+        n = len(self._wave)
+        w = bgR * 1.5
+        x0, bw = cx - w / 2.0, w / len(self._wave)
+        NSColor.colorWithSRGBRed_green_blue_alpha_(0.55, 0.8, 1.0, 0.55 * self._rec).set()
+        for i, s in enumerate(self._wave):
+            h = 1.5 + s * bgR * 1.2
+            NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(
+                NSMakeRect(x0 + i * bw, cy - h / 2.0, bw * 0.55, h), bw * 0.25, bw * 0.25).fill()
 
     def mouseDown_(self, event):
         if self._on_click:
